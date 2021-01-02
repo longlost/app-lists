@@ -1,0 +1,56 @@
+
+<style>
+
+  :host {
+    display:   flex;
+    flex-wrap: nowrap;
+    height:    100%;
+  }
+  
+  :host([layout="vertical"]) {
+    flex-direction: column;
+    height:         100vh;
+    overflow-y:     visible;
+  }
+
+  :host([layout="horizontal"]) {
+    flex-direction: row;
+    overflow-x:     scroll;
+  }
+
+  :host([layout="vertical"]) #box {
+    min-height: 200%;
+  }
+
+  :host([layout="horizontal"]) #box {
+    display:   flex;
+    min-width: 200%;
+  }
+
+  #trigger {
+    min-height: 1px;
+    min-width:  1px;
+  }
+
+</style>
+
+
+<div id="box">
+  
+  <template is="dom-repeat" 
+            items="[[_containerItems]]"
+            strip-whitespace
+            on-dom-change="__domChangeHandler">
+
+    <div class="container" 
+         index="[[index]]">
+      
+      <slot name$="slot-[[index]]"></slot>
+
+    </div>
+
+  </template>
+
+</div>
+
+<div id="trigger"></div>

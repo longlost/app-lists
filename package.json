@@ -1,0 +1,28 @@
+{
+  "name": "@longlost/app-lists",
+  "version": "1.0.0",
+  "description": "A collection of custom elements, each designed to work with a list of DOM elements.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/longlost/app-lists.git"
+  },
+  "keywords": [
+    "list",
+    "infinite",
+    "scroll"
+  ],
+  "author": "Longlost Dev longlostdev@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/longlost/app-lists/issues"
+  },
+  "homepage": "https://github.com/longlost/app-lists#readme",
+  "dependencies": {
+    "@longlost/app-core": "^1.1.4",
+    "@polymer/polymer": "^3.4.1"
+  }
+}
