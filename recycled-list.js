@@ -8,108 +8,176 @@
   *   even for very large lists.
   *
   *
+  *   NOTE: Currently, it is REQUIRED that all elements have identical dimensions.
+  *
+  *
   *  Example Usage:
   *
   *
   *   pup-list.js
   *
-      ```
-        import '@longlost/app-lists/recycled-list.js';
-  
-      ...
-
-        static get properties() {
-          return {
-
-            // Master list input collection.
-            items: {
-              type: Array,
-              value: [
-                {name: 'Spirit'},
-                {name: 'Bub'},
-                {name: 'Hunter'},
-                {name: 'Bandit'},
-                {name: 'Molly'},
-                {name: 'Bear'},
-                {name: 'Lady'},
-                {name: 'Dunny'},
-                {name: 'Red'},
-                {name: 'Cindy'},
-                {name: 'Suzie'},
-                {name: 'Mia'},
-                {name: 'Rex'},
-                {name: 'Mercedes'},
-                {name: 'Oscar'},
-                {name: 'Fancy'},
-                {name: 'Rover'},
-                {name: 'Wendy'},
-                {name: 'Spot'},
-                {name: 'Buddy'},
-                {name: 'Fido'},
-                {name: 'Puddles'},
-                {name: 'Woofie'},
-                {name: 'Snickers'}
-              ]
-            },
-
-            // Drives implementation's <template is="dom-repeat">
-            _items: Array
-
-          };
-        }
-
-
-        __itemsChangedHandler(event) {
-          this._items = event.detail.value;
-        }
-    
-      ```
+  *   ```
+  *     import '@longlost/app-lists/recycled-list.js';
+  *
+  *   ...
+  *
+  *     static get properties() {
+  *       return {
+  *
+  *         // Master list input collection.
+  *         items: {
+  *           type: Array,
+  *           value: [
+  *             {name: 'Spirit'},
+  *             {name: 'Bub'},
+  *             {name: 'Hunter'},
+  *             {name: 'Bandit'},
+  *             {name: 'Molly'},
+  *             {name: 'Bear'},
+  *             {name: 'Lady'},
+  *             {name: 'Dunny'},
+  *             {name: 'Red'},
+  *             {name: 'Cindy'},
+  *             {name: 'Suzie'},
+  *             {name: 'Mia'},
+  *             {name: 'Rex'},
+  *             {name: 'Mercedes'},
+  *             {name: 'Oscar'},
+  *             {name: 'Fancy'},
+  *             {name: 'Rover'},
+  *             {name: 'Wendy'},
+  *             {name: 'Spot'},
+  *             {name: 'Buddy'},
+  *             {name: 'Fido'},
+  *             {name: 'Puddles'},
+  *             {name: 'Woofie'},
+  *             {name: 'Snickers'}
+  *           ]
+  *         },
+  *
+  *         // Drives implementation's <template is="dom-repeat">
+  *         _items: Array
+  *
+  *       };
+  *     }
+  *
+  *
+  *     __itemsChangedHandler(event) {
+  *       this._items = event.detail.value;
+  *     }
+  *  
+  *   ```
   *
   *   pup-list.html
   *
-      ```
-
-        <style>
-
-          .item {
-            min-height:       128px;
-            min-width:        calc(100vw - 64px);
-            margin-right:     8px;
-            padding:          16px;
-            border-bottom:    2px solid lightgray;
-            background-color: white;
-            color:            black;
-          }
-
-        </style>
-
-    
-        <recycled-list infinite
-                       items="[[items]]"
-                       on-recycled-list-current-items-changed="__itemsChangedHandler">
-
-          <template is="dom-repeat" 
-                    items="[[_items]]">
-
-            <div class="item" 
-                 slot$="slot-[[index]]">
-              <h2>[[item.name]]</h2>
-              <p>Recycled item [[index]]</p>
-            </div>
-
-          </template>
-
-        </recycled-list>
-
-      ```
+  *   ```
   *
+  *     <style>
   *
+  *       .item {
+  *         min-height:       128px;
+  *         min-width:        calc(100vw - 64px);
+  *         margin-right:     8px;
+  *         padding:          16px;
+  *         border-bottom:    2px solid lightgray;
+  *         background-color: white;
+  *         color:            black;
+  *       }
+  *
+  *     </style>
+  *
+  *  
+  *     <recycled-list infinite
+  *                    items="[[items]]"
+  *                    on-recycled-list-current-items-changed="__itemsChangedHandler">
+  *
+  *       <template is="dom-repeat" 
+  *                 items="[[_items]]">
+  *
+  *         <div class="item" 
+  *              slot$="slot-[[index]]">
+  *           <h2>[[item.name]]</h2>
+  *           <p>Recycled item [[index]]</p>
+  *         </div>
+  *
+  *       </template>
+  *
+  *     </recycled-list>
+  *
+  *   ```
   *
   *
   *
   *  Properties:
   *
   *
+  *   hMargin - Optional, Number, Default: 2
+  *
+  *     The height of `recycled-list` is multiplied by
+  *     this number when stamping reusable containers.  
+  *    
+  *     The new value is used to calculate how many 
+  *     reusable items will be created, based off how many
+  *     containers will fit inside an virtual container of this size.
+  *    
+  *     A larger number will result in more offscreen containers,
+  *     so there is a tradeoff between scrolling performance and
+  *     memory/computational load.
+  *      
+  *     When tuning rendering performance, this number should scale 
+  *     in proportion to the height of individual repeated containers.
+  *      
+  *     Increase this number for taller containers that take up a 
+  *     large portion of the viewport.
+  *      
+  *     The lower bounds of this number is clamped at 1.5.
+  *    
+  *
+  *
+  *   infinite - Optional, Boolean, Default: undefined
+  *
+  *     Will start back at beginning of 'items' when scrolled past the last
+  *     item in the list when 'infinite' is set.
+  *   
+  *
+  *
+  *   items - Required, Array, Default: undefined
+  *
+  *     The collection used to 'hydrate' each repeated element.
+  *      
+  *     Indirectly drives repeater.
+  *      
+  *     Only a subset of the items is used at a time, 
+  *     dependent on scroll position.
+  *    
+  *
+  *
+  *   layout - Optional, String, Default: 'vertical', Valid values: 'vertical', 'horizontal'
+  *      
+  *     Determines whether the list should scroll vertically or horizontally.
+  *
+  *
+  *    
+  *   wMargin - Optional, Number, Default: 4
+  *    
+  *     The width of `recycled-list` is multiplied by
+  *     this number when stamping reusable containers. 
+  *      
+  *     The new value is used to calculate how many 
+  *     reusable items will be created, based off how many
+  *     containers will fit inside an virtual container of this size.
+  *      
+  *     A larger number will result in more offscreen containers,
+  *     so there is a tradeoff between scrolling performance and
+  *     memory/computational load.
+  *      
+  *     When tuning rendering performance, this number should scale 
+  *     in proportion to the width of individual repeated containers.
+  *      
+  *     Increase this number for wider containers that take up a 
+  *     large portion of the viewport.
+  *      
+  *     The lower bounds of this number is clamped at 1.5.
   *    
   *
   *
@@ -121,15 +189,14 @@
   *                                           'items' array. This array MUST drive the external template
   *                                           repeater.
   *
+  *
   * 
-  *   'recycled-list-pagination-changed' - Detail value is an object that contains 'start' and 'end' indexes.
-  *   
+  *   'recycled-list-pagination-changed' - Detail value is an object that contains 'count' 
+  *                                        (number of recycled containers), 'start' and 'end' indexes.
+  *                                        'start' represents the current topmost/leftmost visible item.
+  *                                        'count' and 'end' are only hints to the developer and 
+  *                                        are not strict boundaries or limits.
   *  
-  *  Methods:
-  *
-  *
-  *    
-  *
   *
   *
   *   @customElement
@@ -155,7 +222,8 @@ import {
 
 import {
   consumeEvent,
-  getComputedStyle
+  getComputedStyle,
+  schedule
 } from '@longlost/app-core/utils.js';
 
 import htmlString from './recycled-list.html';
@@ -182,6 +250,7 @@ const getXFromMatrixStyle = compose(split(','), secondToLast, trim);
 
 
 const getPreviousVerticalDistance = el => {
+
   const style = getComputedStyle(el, 'transform');
 
   if (style === 'none') { return 0; }
@@ -193,6 +262,7 @@ const getPreviousVerticalDistance = el => {
 
 
 const getPreviousHorizontalDistance = el => {
+
   const style = getComputedStyle(el, 'transform');
 
   if (style === 'none') { return 0; }
@@ -204,6 +274,7 @@ const getPreviousHorizontalDistance = el => {
 
 // Vertical layouts when scrolling down.
 const moveAvailableDown = (visible, hidden) => {
+
   const topVisible = head(visible);
 
   // Hidden items that are above the scroller can be moved down.
@@ -241,6 +312,7 @@ const moveAvailableDown = (visible, hidden) => {
 
 // Vertical layouts when scrolling up.
 const moveAvailableUp = (visible, hidden) => {
+
   const bottomVisible = tail(visible);
 
   // Hidden items that are below the scroller can be moved up.
@@ -287,6 +359,7 @@ const moveAvailableUp = (visible, hidden) => {
 
 // Horizontal layouts when scrolling left to right.
 const moveAvailableRight = (visible, hidden) => {
+
   const leftVisible = head(visible);
 
   // Hidden items that are to the left of the scroller can be moved right.
@@ -325,6 +398,7 @@ const moveAvailableRight = (visible, hidden) => {
 
 // Horizontal layouts when scrolling right to left.
 const moveAvailableLeft = (visible, hidden) => {
+
   const rightVisible = tail(visible);
 
   // Hidden items that are to the right of the scroller can be moved left.
@@ -417,6 +491,7 @@ class RecycledList extends AppElement {
       // dependent on scroll position.
       items: Array,
 
+      // Determines whether the list should scroll vertically or horizontally.
       layout: {
         type: String,
         value: 'vertical', // Or 'horizontal'.
@@ -446,12 +521,26 @@ class RecycledList extends AppElement {
         value: 4
       },
 
+      _containerCount: {
+        type: Number,
+        value: 1,
+        computed: '__computeContainerCount(items.length, _maxContainerCount)'
+      },
+
       _containerIndex: {
         type: Number,
         computed: '__computeContainerIndex(_containerCount, _virtualIndex)'
       },
 
+      // Drives the `template` repeater.
+      _containerItems: {
+        type: Array,
+        computed: '__computeContainerItems(_containerCount)'
+      },
+
       // Wrapper elements for repeated slots.
+      // The total stamped DOM containers that are present once 
+      // the number of items that will fill the 'box' has been determined.
       _containers: Array,
 
       // A subset of provided 'items' that represents the currently
@@ -463,15 +552,11 @@ class RecycledList extends AppElement {
 
       _data: {
         type: Array,
-        computed: '__computeData(items, infinite, _containerCount, _start)'
+        computed: '__computeData(infinite, items, _containerCount, _start)'
       },
 
       // The current scroll direction, 'up', 'down', 'left' or 'right'.
       _direction: String,
-
-      // A reference to the total stamped DOM containers that are present once 
-      // the number of items that will fill the 'box' has been determined.
-      _containers: Array,
 
       // The total set of IntersectionObserverEntry objects for every DOM element container.
       // This list is updated when each time an entry changes its intersectional state.
@@ -486,19 +571,16 @@ class RecycledList extends AppElement {
         computed: '__computeHidden(_entries)'
       },
 
-      // Determines how many recyclable containers to stamp out,
+      // Determines the maximum number of recyclable containers to stamp out,
       // given the particular layout, host size plus margin and item size.
-      _containerCount: {
+      _maxContainerCount: {
         type: Number,
-        value: 1,
-        computed: '__computeContainerCount(layout, hMargin, wMargin, _height, _width, _sampleBbox)'
+        computed: '__computeMaxContainerCount(layout, hMargin, wMargin, _height, _width, _sampleBbox)'
       },
 
-      // Drives the `template` repeater.
-      _containerItems: {
-        type: Array,
-        computed: '__computeContainerItems(items, _containerCount)'
-      },
+      // This becomes true when the amount of containers changes.
+      // Necessary to correct for screen rotation/resizes.
+      _needsRepositioning: Boolean,
 
       _resizeObserver: Object,
 
@@ -565,12 +647,13 @@ class RecycledList extends AppElement {
       '__layoutTriggeredChanged(layout, _triggered)',
       '__updateCurrentItems(_data)',
       '__updatePagination(_virtualIndex, _containerCount)',
-      '__updateVirtualStart(_hidden)'
+      '__updateVirtualStart(_sorted)'
     ];
   }
 
 
   constructor() {
+
     super();
 
     this.__hostScrollHandler   = this.__hostScrollHandler.bind(this);
@@ -579,6 +662,7 @@ class RecycledList extends AppElement {
 
 
   connectedCallback() {
+
     super.connectedCallback();
 
     this.__observeHost();
@@ -586,6 +670,7 @@ class RecycledList extends AppElement {
 
 
   disconnectedCallback() {
+
     super.disconnectedCallback();
 
     window.removeEventListener('scroll', this.__windowScrollHandler);
@@ -594,50 +679,14 @@ class RecycledList extends AppElement {
   }
 
 
-  __computeContainerIndex(count, virtualIndex) {
-    if (!count || !virtualIndex) { return 0; }
+  __computeContainerCount(length = 1, max = 1) {
 
-    return virtualIndex % count;
+    return Math.min(length, max);
   }
 
 
-  __computeData(items, infinite, count, start) {
-    if (!items || typeof start !== 'number') { return; }
+  __computeMaxContainerCount(layout, hMargin, wMargin, h, w, sampleBbox) {
 
-    const end    = start + count;
-    const length = items.length;
-
-    if (infinite && end > length) {
-
-      const delta = end - length;
-
-      const beginning = items.slice(start);
-      const ending    = items.slice(0, delta);
-
-      return [...beginning, ...ending];
-    }
-
-    return items.slice(start, end);
-  }
-
-
-  __computeHidden(entries) {
-    if (!entries) { return; }
-
-    return entries.filter(entry => entry.intersectionRatio === 0);
-  }
-
-
-  __computeContainerItems(items, count) {
-    if (!items) { return; }
-
-    const length = Math.min(items.length, count);
-
-    return Array(length).fill(undefined);
-  }
-
-
-  __computeContainerCount(layout, hMargin, wMargin, h, w, sampleBbox) {
     if (!layout || !h || !w || !sampleBbox) { return 1; }
 
     const {height, width} = sampleBbox;
@@ -660,7 +709,51 @@ class RecycledList extends AppElement {
   }
 
 
+  __computeContainerIndex(count, virtualIndex) {
+
+    if (!count || !virtualIndex) { return 0; }
+
+    return virtualIndex % count;
+  }
+
+
+  __computeContainerItems(count) {
+
+    return Array(count).fill(undefined);
+  }
+
+
+  __computeData(infinite, items, count, start) {
+
+    if (!items || typeof start !== 'number') { return; }
+
+    const end    = start + count;
+    const length = items.length;
+
+    if (infinite && end > length) {
+
+      const delta = end - length;
+
+      const beginning = items.slice(start);
+      const ending    = items.slice(0, delta);
+
+      return [...beginning, ...ending];
+    }
+
+    return items.slice(start, end);
+  }
+
+
+  __computeHidden(entries) {
+
+    if (!entries) { return; }
+
+    return entries.filter(entry => entry.intersectionRatio === 0);
+  }
+
+
   __computeSampleBbox(containers) {
+
     if (!containers || !containers.length) { return; }
 
     return head(containers).getBoundingClientRect();
@@ -670,6 +763,7 @@ class RecycledList extends AppElement {
   // and create a collection that is similar to 
   // IntersectionObserverEntry to standardize the api.
   __computeSorted(layout, containers, hidden) {
+
     if (!layout || !containers || !hidden) { return; }
 
     const entries = containers.map(container => ({
@@ -684,6 +778,7 @@ class RecycledList extends AppElement {
 
 
   __computeStart(infinite, items, virtualStart) {
+
     if (!items || !items.length) { return 0; }
 
     const length = items.length;
@@ -700,6 +795,7 @@ class RecycledList extends AppElement {
 
 
   __computeStopRecycling(infinite, items, count, virtualStart) {
+
     if (infinite || !items || !count) { return false; }
 
     const last = items.length - 1;
@@ -709,6 +805,7 @@ class RecycledList extends AppElement {
 
 
   __computeVirtualIndex(layout, sampleBbox, scroll) {
+
     if (!layout || !sampleBbox || typeof scroll !== 'number') { return 0; }
 
     const {height, left, top, width} = sampleBbox;
@@ -723,6 +820,24 @@ class RecycledList extends AppElement {
 
 
   __scrollChanged(newVal = 0, oldVal = 0) {
+
+    // This corrects an issue caused by programmic scrolling 
+    // to top which misplaces containers due to IntersecionObserver
+    // lagging behind the speed of scrolling up. 
+    // 
+    // This is especially problematic when the list has been scrolled
+    // down quite a bit, resulting in a high rate of scroll velocity.
+    //
+    // Programmic scrolling includes built in scroll to top functionality 
+    // on Apple touch devices (when top of ui chrome is tapped), as
+    // well as calls to window.scrollTo(0).
+    if (newVal === 0 && oldVal && this._containers) {
+
+      this._containers.forEach(el => {
+        el.style['transform'] = 'none';
+      });
+    }
+
     if (this.layout === 'vertical') {
       this._direction = newVal > oldVal ? 'down' : 'up';
     }
@@ -731,8 +846,37 @@ class RecycledList extends AppElement {
     }
   }
 
+  // Correct the position of containers when some have been removed or added.
+  // This commonly occurs after screen rotation or resize changes.
+  __repositionContainers() {
 
-  __moveAvailableContainers(direction, sorted) {
+    if (typeof this._containerIndex !== 'number' || !this._virtualIndex) { return; }
+
+    const previousGetter = this.layout === 'vertical' ? 
+                             getPreviousVerticalDistance : 
+                             getPreviousHorizontalDistance;
+
+    const translate = this.layout === 'vertical' ? 'translateY' : 'translateX';
+
+    const reference = head(this._containers);
+    const {height}  = reference.getBoundingClientRect();
+    const position  = height * (this._virtualIndex - this._containerIndex);
+
+    this._containers.forEach(el => {
+      el.style['transform'] = `${translate}(${position}px)`;
+    });
+
+    // Force a new set of calculations that place 
+    // the data items in the proper containers.
+    const temp = this._entries;
+
+    this._entries = undefined;
+    this._entries = temp;
+  }
+
+
+  async __moveAvailableContainers(direction, sorted) {
+
     if (
       !direction     || 
       !sorted        || 
@@ -741,11 +885,22 @@ class RecycledList extends AppElement {
       !this._hidden.length
     ) { return; }
 
+    // This corrects for screen orientation/resize changes.
+    if (this._needsRepositioning) {
+      this._needsRepositioning = false;
+
+      await schedule();
+
+      this.__repositionContainers();
+
+      return;
+    }
+
     if (this._stopRecycling && (direction === 'down' || direction === 'right')) { return; }
 
     // This rare state happens when IntersectionObserver hasn't 
     // updated the state of all containers yet, 
-    // and so is an erronous state that must be ignored.
+    // and so is an erroneous state that must be ignored.
     if (this._hidden.length === sorted.length) { return; }
 
     const {sortedHidden, sortedVisible} = sorted.reduce((accum, entry) => {
@@ -761,7 +916,6 @@ class RecycledList extends AppElement {
 
       return accum;
     }, {sortedHidden: [], sortedVisible: []});
-
 
     switch (direction) {
 
@@ -788,6 +942,7 @@ class RecycledList extends AppElement {
 
 
   __containersItemCountChanged(containers, count) {
+
     if (!containers || containers.length < 2 || !count) { return; }
 
     this.__cleanUpContainersObserver();
@@ -799,6 +954,7 @@ class RecycledList extends AppElement {
 
 
   __currentItemsChanged(items) {
+
     if (!items) { return; }
 
     this.fire('recycled-list-current-items-changed', {value: items});
@@ -807,10 +963,11 @@ class RecycledList extends AppElement {
   // Cannot use a computed here because '_sorted' 
   // changing creates unnecessary computation cycles.
   //
-  // Extra work is to avoided, since '_currentItems' 
+  // Extra work is to be avoided, since '_currentItems' 
   // deals directly with stamping repeated DOM elements
   // while scrolling.
   __updateCurrentItems(data) {
+
     if (!data) { return; }
 
     if (!this._sorted) { 
@@ -827,8 +984,10 @@ class RecycledList extends AppElement {
 
 
   __updatePagination(index, count) {
+
     this.fire('recycled-list-pagination-changed', {
       value: {
+        count,
         end:   index + count, 
         start: index
       }
@@ -836,14 +995,14 @@ class RecycledList extends AppElement {
   }
 
 
-  __updateVirtualStart(hidden) {
+  __updateVirtualStart(sorted) {
 
-    if (!hidden || !this._virtualIndex) {
+    if (!sorted || !this._virtualIndex) {
       this._virtualStart = 0;
       return;
     }
 
-    const offset = this._sorted.findIndex(entry => 
+    const offset = sorted.findIndex(entry => 
                      entry.target.index === this._containerIndex);
 
     this._virtualStart = this._virtualIndex - offset;
@@ -868,6 +1027,7 @@ class RecycledList extends AppElement {
 
 
   __growBox(dimension) {
+
     const listDim = dimension === 'height' ? this._height : this._width;
     const boxDim  = this.$.box.getBoundingClientRect()[dimension];
     const newDim  = this._stopRecycling ? boxDim - listDim : listDim + boxDim;
@@ -879,6 +1039,7 @@ class RecycledList extends AppElement {
 
 
   __layoutTriggeredChanged(layout, triggered) {
+
     if (!layout) { return; }
 
     if (triggered) {
@@ -891,6 +1052,7 @@ class RecycledList extends AppElement {
 
 
   __hostScrollHandler(event) {
+
     consumeEvent(event);
 
     window.requestAnimationFrame(() => {
@@ -900,6 +1062,7 @@ class RecycledList extends AppElement {
 
 
   __windowScrollHandler() {
+
     window.requestAnimationFrame(() => {
       this._scroll = window.scrollY;
     });
@@ -996,6 +1159,7 @@ class RecycledList extends AppElement {
 
 
   __cleanUpContainersObserver() {
+
     if (this._containersIntObserver) {
 
       this._containers.forEach(el => {
@@ -1008,6 +1172,7 @@ class RecycledList extends AppElement {
 
 
   __cleanUpResizeObserver() {
+
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = undefined;
@@ -1016,6 +1181,7 @@ class RecycledList extends AppElement {
 
 
   __cleanUpTriggerObserver() {
+
     if (this._triggerIntObserver) {
       this._triggerIntObserver.unobserve(this.$.trigger);
       this._triggerIntObserver = undefined;
@@ -1023,7 +1189,8 @@ class RecycledList extends AppElement {
   }
 
 
-  __cleanUpObservers() {    
+  __cleanUpObservers() {
+
     this.__cleanUpContainersObserver();
     this.__cleanUpResizeObserver();
     this.__cleanUpTriggerObserver();
@@ -1031,7 +1198,12 @@ class RecycledList extends AppElement {
 
 
   __domChangeHandler(event) {
+
     consumeEvent(event);
+
+    if (this._containers) {
+      this._needsRepositioning = true;
+    }
 
     this._containers = this.selectAll('.container');
   }
