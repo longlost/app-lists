@@ -185,17 +185,28 @@
   *  Events:
   *
   *
-  *   'recycled-list-current-items-changed' - Detail value is an array which is a subset of the provided
-  *                                           'items' array. This array MUST drive the external template
-  *                                           repeater.
+  *   'recycled-list-current-items-changed', {value: items}
+  *
+  *     Detail value is an array which is a subset of the provided 'items' array. 
+  *     This array MUST drive the external template repeater, to keep items 
+  *     synchronized with their recycled containers.
   *
   *
   * 
-  *   'recycled-list-pagination-changed' - Detail value is an object that contains 'count' 
-  *                                        (number of recycled containers), 'start' and 'end' indexes.
-  *                                        'start' represents the current topmost/leftmost visible item.
-  *                                        'count' and 'end' are only hints to the developer and 
-  *                                        are not strict boundaries or limits.
+  *   'recycled-list-pagination-changed', {value: {count, end, start}} 
+  *
+  *     Detail value is an object that contains 'count' 
+  *     (number of recycled containers), 'start' and 'end' indexes.
+  *     'start' represents the current topmost/leftmost visible item.
+  *     'count' and 'end' are only hints to the developer and 
+  *     are not strict boundaries or limits.
+  *
+  *
+  *
+  *   'recycled-list-sample-bbox-changed', {value: DOMRect} 
+  *
+  *     Detail value is a DOMRect object from the initial instance of a slotted child. 
+  *     This info is used internally to determine how many recycleable elements to stamp out.
   *  
   *
   *
@@ -212,17 +223,15 @@ import {
   html
 } from '@longlost/app-core/app-element.js';
 
+import {DomObserversMixin} from './dom-observers-mixin.js';
+
 import {
-  compose,
   head,
-  split,
-  tail,
-  trim
+  tail
 } from '@longlost/app-core/lambda.js';
 
 import {
   consumeEvent,
-  getComputedStyle,
   schedule
 } from '@longlost/app-core/utils.js';
 
@@ -238,39 +247,6 @@ const sortHorizontalAscending = entries =>
                                   entries.sort((a, b) => 
                                     a.boundingClientRect.left - b.boundingClientRect.left);
 
-
-// String input format ie. 'matrix(1, 0, 0, 1, 0, 640)' --> 640.
-const getYFromMatrixStyle = compose(split(','), tail, trim, split(')'), head);
-
-
-const secondToLast = array => array[array.length - 2];
-
-// String input format ie. 'matrix(1, 0, 0, 1, 686, 0)' --> 686.
-const getXFromMatrixStyle = compose(split(','), secondToLast, trim);
-
-
-const getPreviousVerticalDistance = el => {
-
-  const style = getComputedStyle(el, 'transform');
-
-  if (style === 'none') { return 0; }
-
-  const y = getYFromMatrixStyle(style);
-
-  return Number(y);  
-};
-
-
-const getPreviousHorizontalDistance = el => {
-
-  const style = getComputedStyle(el, 'transform');
-
-  if (style === 'none') { return 0; }
-
-  const x = getXFromMatrixStyle(style);
-
-  return Number(x);  
-};
 
 // Vertical layouts when scrolling down.
 const moveAvailableDown = (visible, hidden) => {
@@ -301,12 +277,15 @@ const moveAvailableDown = (visible, hidden) => {
   const {bottom}   = bottomRest.boundingClientRect;
 
   availableToMove.forEach((entry, index) => {
-    const {height, top} = entry.boundingClientRect;
-    const previous      = getPreviousVerticalDistance(entry.target);
-    const h             = height * index;
-    const distance      = previous + bottom - top + h;
+    const {boundingClientRect, target} = entry;
+    const {height, top}                = boundingClientRect;
 
-    entry.target.style['transform'] = `translateY(${distance}px)`;
+    const previous = target.previous || 0;
+    const h        = height * index;
+    const distance = previous + bottom - top + h;
+
+    target.previous           = distance; // Cache for next move.
+    target.style['transform'] = `translateY(${distance}px)`;
   });
 };
 
@@ -343,8 +322,10 @@ const moveAvailableUp = (visible, hidden) => {
   const {top}   = topRest.boundingClientRect;
 
   availableToMove.forEach((entry, index) => {
-    const {bottom, height} = entry.boundingClientRect;
-    const previous         = getPreviousVerticalDistance(entry.target);
+    const {boundingClientRect, target} = entry;
+    const {bottom, height}             = boundingClientRect;
+
+    const previous = target.previous || 0;
 
     if (previous === 0) { return; }
 
@@ -353,7 +334,8 @@ const moveAvailableUp = (visible, hidden) => {
 
     if (distance < 0) { return; }
 
-    entry.target.style['transform'] = `translateY(${distance}px)`;
+    target.previous           = distance; // Cache for next move.
+    target.style['transform'] = `translateY(${distance}px)`;
   });
 };
 
@@ -387,12 +369,15 @@ const moveAvailableRight = (visible, hidden) => {
   const {right}   = rightRest.boundingClientRect;
 
   availableToMove.forEach((entry, index) => {
-    const {width, left} = entry.boundingClientRect;
-    const previous      = getPreviousHorizontalDistance(entry.target);
-    const w             = width * index;
-    const distance      = previous + right - left + w;
+    const {boundingClientRect, target} = entry;
+    const {width, left}                = boundingClientRect;
 
-    entry.target.style['transform'] = `translateX(${distance}px)`;
+    const previous = target.previous || 0;
+    const w        = width * index;
+    const distance = previous + right - left + w;
+
+    target.previous           = distance; // Cache for next move.
+    target.style['transform'] = `translateX(${distance}px)`;
   });
 };
 
@@ -429,8 +414,10 @@ const moveAvailableLeft = (visible, hidden) => {
   const {left}   = leftRest.boundingClientRect;
 
   availableToMove.forEach((entry, index) => {
-    const {right, width} = entry.boundingClientRect;
-    const previous       = getPreviousHorizontalDistance(entry.target);
+    const {boundingClientRect, target} = entry;
+    const {right, width}               = boundingClientRect;
+
+    const previous = target.previous || 0;
 
     if (previous === 0) { return; }
 
@@ -439,12 +426,13 @@ const moveAvailableLeft = (visible, hidden) => {
 
     if (distance < 0) { return; }
 
-    entry.target.style['transform'] = `translateX(${distance}px)`;
+    target.previous           = distance; // Cache for next move.
+    target.style['transform'] = `translateX(${distance}px)`;
   });
 };
 
 
-class RecycledList extends AppElement {
+class RecycledList extends DomObserversMixin(AppElement) {
 
   static get is() { return 'recycled-list'; }
 
@@ -456,76 +444,9 @@ class RecycledList extends AppElement {
   static get properties() {
     return {
 
-      // The height of `recycled-list` is multiplied by
-      // this number when stamping reusable containers.  
-      //
-      // The new value is used to calculate how many 
-      // reusable items will be created, based off how many
-      // containers will fit inside an virtual container of this size.
-      //
-      // A larger number will result in more offscreen containers,
-      // so there is a tradeoff between scrolling performance and
-      // memory/computational load.
-      //
-      // When tuning rendering performance, this number should scale 
-      // in proportion to the height of individual repeated containers.
-      //
-      // Increase this number for taller containers that take up a 
-      // large portion of the viewport.
-      //
-      // The lower bounds of this number is clamped at 1.5.
-      hMargin: {
-        type: Number,
-        value: 2
-      },
-
       // Will start back at beginning of 'items' when scrolled past the last
       // item in the list when 'infinite' is set.
       infinite: Boolean,
-
-      // The collection used to 'hydrate' each repeated element.
-      //
-      // Indirectly drives repeater.
-      //
-      // Only a subset of the items is used at a time, 
-      // dependent on scroll position.
-      items: Array,
-
-      // Determines whether the list should scroll vertically or horizontally.
-      layout: {
-        type: String,
-        value: 'vertical', // Or 'horizontal'.
-        reflectToAttribute: true
-      },
-
-      // The width of `recycled-list` is multiplied by
-      // this number when stamping reusable containers. 
-      //
-      // The new value is used to calculate how many 
-      // reusable items will be created, based off how many
-      // containers will fit inside an virtual container of this size.
-      //
-      // A larger number will result in more offscreen containers,
-      // so there is a tradeoff between scrolling performance and
-      // memory/computational load.
-      //
-      // When tuning rendering performance, this number should scale 
-      // in proportion to the width of individual repeated containers.
-      //
-      // Increase this number for wider containers that take up a 
-      // large portion of the viewport.
-      //
-      // The lower bounds of this number is clamped at 1.5.
-      wMargin: {
-        type: Number,
-        value: 4
-      },
-
-      _containerCount: {
-        type: Number,
-        value: 1,
-        computed: '__computeContainerCount(items.length, _maxContainerCount)'
-      },
 
       _containerIndex: {
         type: Number,
@@ -537,11 +458,6 @@ class RecycledList extends AppElement {
         type: Array,
         computed: '__computeContainerItems(_containerCount)'
       },
-
-      // Wrapper elements for repeated slots.
-      // The total stamped DOM containers that are present once 
-      // the number of items that will fill the 'box' has been determined.
-      _containers: Array,
 
       // A subset of provided 'items' that represents the currently
       // visible set of virtual elements. This is a slice of the 
@@ -556,49 +472,22 @@ class RecycledList extends AppElement {
       },
 
       // The current scroll direction, 'up', 'down', 'left' or 'right'.
-      _direction: String,
-
-      // The total set of IntersectionObserverEntry objects for every DOM element container.
-      // This list is updated when each time an entry changes its intersectional state.
-      _entries: Array,
-
-      // Height dimension of the host element.
-      _height: Number,
-
-      // Intersection Observer entries for '_containers' that are not visible.
-      _hidden: {
-        type: Array,
-        computed: '__computeHidden(_entries)'
-      },
-
-      // Determines the maximum number of recyclable containers to stamp out,
-      // given the particular layout, host size plus margin and item size.
-      _maxContainerCount: {
-        type: Number,
-        computed: '__computeMaxContainerCount(layout, hMargin, wMargin, _height, _width, _sampleBbox)'
+      _direction: {
+        type: String,
+        observer: '__directionChanged'
       },
 
       // This becomes true when the amount of containers changes.
       // Necessary to correct for screen rotation/resizes.
       _needsRepositioning: Boolean,
 
-      _resizeObserver: Object,
-
-      // The initial stamped item.
-      // Used to determine the number reusable containers to 
-      // stamp which will fill the box.
-      //
-      // '_height' and '_width' used as timing triggers only.
-      _sampleBbox: {
-        type: Object,
-        computed: '__computeSampleBbox(_containers, _height, _width)'
-      },
-
       // This current scrolled distance of the host element.
       _scroll: {
         type: Number,
         observer: '__scrollChanged'
       },
+
+      _skipCurrentItemsUpdate: Boolean,
 
       _sorted: {
         type: Array,
@@ -616,10 +505,6 @@ class RecycledList extends AppElement {
         computed: '__computeStopRecycling(infinite, items, _containerCount, _virtualStart)'
       },
 
-      _triggered: Boolean,
-
-      _triggerIntObserver: Object,
-
       _virtualIndex: {
         type: Number,
         value: 0,
@@ -629,10 +514,7 @@ class RecycledList extends AppElement {
       _virtualStart: {
         type: Number,
         value: 0
-      },
-
-      // Width dimension of the host element.
-      _width: Number
+      }
 
     };
   }
@@ -640,11 +522,10 @@ class RecycledList extends AppElement {
 
   static get observers() {
     return [
-      '__moveAvailableContainers(_direction, _sorted)',
-      '__containersItemCountChanged(_containers, _containerCount)',
       '__currentItemsChanged(_currentItems)',
       '__layoutChanged(layout)',
-      '__layoutTriggeredChanged(layout, _triggered)',
+      '__moveAvailableContainers(_sorted)',
+      '__sampleBboxChanged(_sampleBbox)',
       '__updateCurrentItems(_data)',
       '__updatePagination(_virtualIndex, _containerCount)',
       '__updateVirtualStart(_sorted)'
@@ -661,51 +542,12 @@ class RecycledList extends AppElement {
   }
 
 
-  connectedCallback() {
-
-    super.connectedCallback();
-
-    this.__observeHost();
-  }
-
-
   disconnectedCallback() {
 
     super.disconnectedCallback();
 
     window.removeEventListener('scroll', this.__windowScrollHandler);
     this.removeEventListener('scroll',   this.__hostScrollHandler);
-    this.__cleanUpObservers();
-  }
-
-
-  __computeContainerCount(length = 1, max = 1) {
-
-    return Math.min(length, max);
-  }
-
-
-  __computeMaxContainerCount(layout, hMargin, wMargin, h, w, sampleBbox) {
-
-    if (!layout || !h || !w || !sampleBbox) { return 1; }
-
-    const {height, width} = sampleBbox;
-
-    if (!height || !width) { return 1; }
-
-    if (layout === 'vertical') {
-      const multiplier = hMargin || 2;
-
-      return Math.ceil((h * Math.max(multiplier, 1.5)) / height);
-    }
-
-    if (layout === 'horizontal') {
-      const multiplier = wMargin || 4;
-
-      return Math.ceil((w * Math.max(multiplier, 1.5)) / width);
-    }
-
-    return 1;
   }
 
 
@@ -741,22 +583,6 @@ class RecycledList extends AppElement {
     }
 
     return items.slice(start, end);
-  }
-
-
-  __computeHidden(entries) {
-
-    if (!entries) { return; }
-
-    return entries.filter(entry => entry.intersectionRatio === 0);
-  }
-
-
-  __computeSampleBbox(containers) {
-
-    if (!containers || !containers.length) { return; }
-
-    return head(containers).getBoundingClientRect();
   }
 
   // Get live position measurements, sort by position,
@@ -819,30 +645,35 @@ class RecycledList extends AppElement {
   }
 
 
-  __scrollChanged(newVal = 0, oldVal = 0) {
+  __currentItemsChanged(items) {
 
-    // This corrects an issue caused by programmic scrolling 
-    // to top which misplaces containers due to IntersecionObserver
-    // lagging behind the speed of scrolling up. 
-    // 
-    // This is especially problematic when the list has been scrolled
-    // down quite a bit, resulting in a high rate of scroll velocity.
-    //
-    // Programmic scrolling includes built in scroll to top functionality 
-    // on Apple touch devices (when top of ui chrome is tapped), as
-    // well as calls to window.scrollTo(0).
-    if (newVal === 0 && oldVal && this._containers) {
+    if (!items) { return; }
 
-      this._containers.forEach(el => {
-        el.style['transform'] = 'none';
-      });
+    this.fire('recycled-list-current-items-changed', {value: items});
+  }
+
+  // When changing scroll direction, the first change to this._data
+  // happens before the container elements are resorted properly,
+  // so set a lock that will ensure this erroneous state is ignored.
+  __directionChanged(_, oldVal) {
+
+    if (oldVal) {
+      this._skipCurrentItemsUpdate = true;
     }
+  }
 
-    if (this.layout === 'vertical') {
-      this._direction = newVal > oldVal ? 'down' : 'up';
+
+  __layoutChanged(layout) {
+
+    if (!layout) { return; }
+
+    if (layout === 'vertical') {
+      this.removeEventListener('scroll', this.__hostScrollHandler);
+      window.addEventListener('scroll',  this.__windowScrollHandler);
     }
-    else if (this.layout === 'horizontal') {
-      this._direction = newVal > oldVal ? 'right' : 'left';
+    else {
+      window.removeEventListener('scroll', this.__windowScrollHandler);
+      this.addEventListener('scroll',      this.__hostScrollHandler);
     }
   }
 
@@ -852,17 +683,13 @@ class RecycledList extends AppElement {
 
     if (typeof this._containerIndex !== 'number' || !this._virtualIndex) { return; }
 
-    const previousGetter = this.layout === 'vertical' ? 
-                             getPreviousVerticalDistance : 
-                             getPreviousHorizontalDistance;
-
     const translate = this.layout === 'vertical' ? 'translateY' : 'translateX';
-
     const reference = head(this._containers);
     const {height}  = reference.getBoundingClientRect();
     const position  = height * (this._virtualIndex - this._containerIndex);
 
     this._containers.forEach(el => {
+      el.previous           = position;
       el.style['transform'] = `${translate}(${position}px)`;
     });
 
@@ -875,13 +702,13 @@ class RecycledList extends AppElement {
   }
 
 
-  async __moveAvailableContainers(direction, sorted) {
+  async __moveAvailableContainers(sorted) {
 
     if (
-      !direction     || 
-      !sorted        || 
-      !sorted.length || 
-      !this._hidden  || 
+      !this._direction ||
+      !sorted          || 
+      !sorted.length   || 
+      !this._hidden    || 
       !this._hidden.length
     ) { return; }
 
@@ -896,7 +723,7 @@ class RecycledList extends AppElement {
       return;
     }
 
-    if (this._stopRecycling && (direction === 'down' || direction === 'right')) { return; }
+    if (this._stopRecycling && (this._direction === 'down' || this._direction === 'right')) { return; }
 
     // This rare state happens when IntersectionObserver hasn't 
     // updated the state of all containers yet, 
@@ -917,7 +744,12 @@ class RecycledList extends AppElement {
       return accum;
     }, {sortedHidden: [], sortedVisible: []});
 
-    switch (direction) {
+    // An erroneous state, where there are no 
+    // visible elements, that must be ignored.
+    if (sortedVisible.length === 0) { return; }
+
+    // Translate containers according to scroll direction.
+    switch (this._direction) {
 
       case 'down':
         moveAvailableDown(sortedVisible, sortedHidden);
@@ -941,23 +773,38 @@ class RecycledList extends AppElement {
   }
 
 
-  __containersItemCountChanged(containers, count) {
+  __sampleBboxChanged(bbox) {
 
-    if (!containers || containers.length < 2 || !count) { return; }
-
-    this.__cleanUpContainersObserver();
-
-    if (containers.length === count) {
-      this.__observeContainers();
-    }
+    this.fire('recycled-list-sample-bbox-changed', {value: bbox});
   }
 
 
-  __currentItemsChanged(items) {
+  __scrollChanged(newVal = 0, oldVal = 0) {
 
-    if (!items) { return; }
+    // This corrects an issue caused by programmic scrolling 
+    // to top which misplaces containers due to IntersecionObserver
+    // lagging behind the speed of scrolling up. 
+    // 
+    // This is especially problematic when the list has been scrolled
+    // down quite a bit, resulting in a high rate of scroll velocity.
+    //
+    // Programmic scrolling includes built in scroll to top functionality 
+    // on Apple touch devices (when top of ui chrome is tapped), as
+    // well as calls to window.scrollTo(0).
+    if (newVal === 0 && oldVal && this._containers) {
 
-    this.fire('recycled-list-current-items-changed', {value: items});
+      this._containers.forEach(el => {
+        el.previous           = 0;
+        el.style['transform'] = 'none';
+      });
+    }
+
+    if (this.layout === 'vertical') {
+      this._direction = newVal > oldVal ? 'down' : 'up';
+    }
+    else if (this.layout === 'horizontal') {
+      this._direction = newVal > oldVal ? 'right' : 'left';
+    }
   }
 
   // Cannot use a computed here because '_sorted' 
@@ -972,6 +819,14 @@ class RecycledList extends AppElement {
 
     if (!this._sorted) { 
       this._currentItems = data;
+      return;
+    }
+
+    // When changing scroll direction, the first change to data
+    // happens before the container elements are resorted properly,
+    // so ignore this erroneous state.
+    if (this._skipCurrentItemsUpdate) {
+      this._skipCurrentItemsUpdate = false;
       return;
     }
 
@@ -1009,48 +864,6 @@ class RecycledList extends AppElement {
   }
 
 
-  __layoutChanged(layout) {
-
-    if (!layout) { return; }
-
-    if (layout === 'vertical') {
-      this.removeEventListener('scroll', this.__hostScrollHandler);
-      window.addEventListener('scroll',  this.__windowScrollHandler);
-    }
-    else {
-      window.removeEventListener('scroll', this.__windowScrollHandler);
-      this.addEventListener('scroll',      this.__hostScrollHandler);
-    }
-
-    this.__observeTrigger(layout);
-  }
-
-
-  __growBox(dimension) {
-
-    const listDim = dimension === 'height' ? this._height : this._width;
-    const boxDim  = this.$.box.getBoundingClientRect()[dimension];
-    const newDim  = this._stopRecycling ? boxDim - listDim : listDim + boxDim;
-
-    this.$.box.style['min-height']       = 'initial';
-    this.$.box.style['min-width']        = 'initial';
-    this.$.box.style[`min-${dimension}`] = `${newDim}px`; 
-  }
-
-
-  __layoutTriggeredChanged(layout, triggered) {
-
-    if (!layout) { return; }
-
-    if (triggered) {
-
-      const dimension = layout === 'vertical' ? 'height' : 'width';
-
-      this.__growBox(dimension);
-    }
-  }
-
-
   __hostScrollHandler(event) {
 
     consumeEvent(event);
@@ -1069,137 +882,11 @@ class RecycledList extends AppElement {
   }
 
 
-  __observeHost() {
-
-    if (this._resizeObserver) { 
-      this.__cleanUpResizeObserver();
-      return;
-    }
-
-    this._resizeObserver = new window.ResizeObserver(entries => {
-
-      const {height, width} = entries[0].contentRect;
-
-      this._height = height;
-      this._width  = width;
-    });
-
-    this._resizeObserver.observe(this);
-  }
-
-
-  __observeTrigger(layout) {
-
-    if (this._triggerIntObserver) { 
-      this.__cleanUpTriggerObserver();
-      return; 
-    }
-
-    const callback = entries => {
-      this._triggered = entries[0].intersectionRatio === 1;
-    };
-
-    const root = layout === 'vertical' ? null : this;
-
-    const options = {
-      root,
-      rootMargin: '150%',
-      threshold:   1
-    };
-
-    this._triggerIntObserver = new window.IntersectionObserver(callback, options);
-    this._triggerIntObserver.observe(this.$.trigger);
-  }
-
-
-  __observeContainers() {
-
-    if (this._containersIntObserver) {
-      this.__cleanUpContainersObserver();
-      return; 
-    }
-
-    // IntersectionObserver initializes with an entry for each
-    // observed container, then only provides entries to containers
-    // which have intersectional state updates as necessary.
-    // So keep a list of all entries and update them over time.
-    // This way, all offscreen vs visible items is known at all times.
-    const callback = entries => {
-
-      if (entries.length === this._containerCount) {
-        this._entries = entries;        
-      }
-      else {
-        this._entries = this._entries.map(entry => {
-
-          const match = entries.find(update => 
-                          update.target === entry.target);
-
-          return match ? match : entry;
-        });
-      }
-    };
-
-    const root       = this.layout === 'vertical' ? null : this;
-    const margin     = this.layout === 'vertical' ? this.hMargin : this.wMargin;
-    const rootMargin = `${margin * 25}%`;
-
-    const options = {
-      root,
-      rootMargin,
-      threshold: 0
-    };
-
-    this._containersIntObserver = new window.IntersectionObserver(callback, options);
-
-    this._containers.forEach(el => {
-      this._containersIntObserver.observe(el);
-    });
-  }
-
-
-  __cleanUpContainersObserver() {
-
-    if (this._containersIntObserver) {
-
-      this._containers.forEach(el => {
-        this._containersIntObserver.unobserve(el);
-      });
-
-      this._containersIntObserver = undefined;
-    }
-  }
-
-
-  __cleanUpResizeObserver() {
-
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = undefined;
-    }
-  }
-
-
-  __cleanUpTriggerObserver() {
-
-    if (this._triggerIntObserver) {
-      this._triggerIntObserver.unobserve(this.$.trigger);
-      this._triggerIntObserver = undefined;
-    }    
-  }
-
-
-  __cleanUpObservers() {
-
-    this.__cleanUpContainersObserver();
-    this.__cleanUpResizeObserver();
-    this.__cleanUpTriggerObserver();
-  }
-
-
-  __domChangeHandler(event) {
+  async __domChangeHandler(event) {
 
     consumeEvent(event);
+
+    await schedule(); // Wait for DOM rendering to settle.
 
     if (this._containers) {
       this._needsRepositioning = true;
