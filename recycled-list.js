@@ -218,10 +218,7 @@
   **/
 
 
-import {
-  AppElement, 
-  html
-} from '@longlost/app-core/app-element.js';
+import {AppElement} from '@longlost/app-core/app-element.js';
 
 import {DomObserversMixin} from './dom-observers-mixin.js';
 
@@ -235,7 +232,7 @@ import {
   schedule
 } from '@longlost/app-core/utils.js';
 
-import htmlString from './recycled-list.html';
+import template from './recycled-list.html';
 
 
 const sortVerticalAscending = entries => 
@@ -437,7 +434,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
   static get is() { return 'recycled-list'; }
 
   static get template() {
-    return html([htmlString]);
+    return template;
   }
 
 
