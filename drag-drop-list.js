@@ -25,16 +25,17 @@
 
 import {GestureEventListeners}      from '@polymer/polymer/lib/mixins/gesture-event-listeners.js';
 import * as Gestures                from '@polymer/polymer/lib/utils/gestures.js';
-import {AppElement, html}           from '@longlost/app-core/app-element.js';
+import {AppElement}                 from '@longlost/app-core/app-element.js';
 import {getComputedStyle, schedule} from '@longlost/app-core/utils.js';
-import htmlString                   from './drag-drop-list.html';
+import template                     from './drag-drop-list.html';
 
 
 class DragDropList extends GestureEventListeners(AppElement) {
+
   static get is() { return 'drag-drop-list'; }
 
   static get template() {
-    return html([htmlString]);
+    return template;
   }
 
 
@@ -104,6 +105,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   connectedCallback() {
+
     super.connectedCallback();
 
     this.__resize = this.__resize.bind(this);
@@ -113,6 +115,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   disconnectedCallback() {
+
     super.disconnectedCallback();
 
     window.removeEventListener('resize', this.__resize);
@@ -120,6 +123,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   async __disabledChanged(disabled) {
+
     // Elements can override scroll direction with 
     // Gestures.setTouchAction(node, action), 
     // where action is one of 'pan-x', 'pan-y', 'none', 
@@ -136,24 +140,29 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
   // Reset container values.
   __resize() {
+
     this.style.height = '100%';
     this.style.width  = '100%';
   }
 
 
   __itemFromEvent(event) {
+
     const path = event.composedPath();
     const item = path.find(el => this._items.includes(el));
+
     return item;
   }
 
 
   __getItemsRects() {
+
     return this._items.map(item => item.getBoundingClientRect());
   }
 
 
   __addTransformStyles(el) {
+
     el.style['left']        = '0px';
     el.style['margin']      = '0px';
     el.style['position']    = 'fixed';
@@ -165,6 +174,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __removeTransformStyles(el) {
+
     el.style['left']        = 'unset';
     el.style['position']    = 'relative';
     el.style['top']         = 'unset';
@@ -175,16 +185,19 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __addPressedStyles(el) {
+
     el.style['transition'] = 'none';
   }
 
 
   __removePressedStyles(el) {
+
     el.style['transition'] = 'transform 0.2s cubic-bezier(0.333, 0, 0, 1)';
   }
 
 
   __addDraggedStyles(el) {
+
     el.style['box-shadow'] = `0px 2px 2px 0px rgba(0, 0, 0, 0.14),
                               0px 1px 5px 0px rgba(0, 0, 0, 0.12),
                               0px 3px 1px -2px rgba(0, 0, 0, 0.2)`;
@@ -194,6 +207,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __removeDraggedStyles(el) {
+
     el.style['-webkit-box-shadow'] = 'unset';
     el.style['box-shadow']         = 'unset';
     el.style['filter']             = 'unset';
@@ -202,6 +216,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __translate3d(x, y, z, el) {
+
     el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
   } 
 
@@ -230,6 +245,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
     this._items.forEach(async (item, index) => {
+
       const rect = this._rects[index];
 
       item.__originalMargin = getComputedStyle(item, 'margin');
@@ -259,6 +275,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __itemFromCoords({x, y}) {
+
     if (!this._rects) { return; }
 
     const index = this._rects.findIndex(rect => 
@@ -292,6 +309,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   async __track(event) {
+
     if (!this._dragging) { return; }
 
     const left = this._targetRect.left + event.detail.dx;
@@ -332,6 +350,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
   
   __trackEnd(event) {
+
     if (!this._dragging) { return; }
 
     this.__removePressedStyles(this._target);
@@ -350,6 +369,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __onTransitionEnd() {
+
     if (this._dragging || !this._target) { return; }
 
     const x = window.scrollX;
@@ -385,11 +405,13 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __onDragStart(event) {
+
     event.preventDefault();
   }
 
 
   __onContextMenu(event) {
+
     if (!this._dragging) { return; }
 
     event.preventDefault();
@@ -398,6 +420,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __onTouchMove(event) {
+
     if (this.disabled) { return; }
 
     event.preventDefault();
@@ -431,6 +454,7 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __separateItems(allItems) {
+
     if (!Array.isArray(allItems)) { return; }
     
     return allItems.reduce((accum, item) => {
@@ -521,11 +545,13 @@ class DragDropList extends GestureEventListeners(AppElement) {
 
 
   __slotChangeHandler() {
+
     this.__updateItems();
   }
 
 
   __onTrack(event) {
+    
     switch(event.detail.state) {
       case 'start': 
         this.__trackStart(event); 
