@@ -1,28 +1,37 @@
 
 <style>
 
-  :host {
-    display:   flex;
-    flex-wrap: nowrap;
-    height:    100%;
+  /* 
+    Using grid instead of flex here to 
+    enforce the constraint of needing 
+    identical sized children.
 
-    --list-item-width: 100%;
+    To keep high performance, this element only
+    measures a sample child once per resize.
+
+    This avoids a scenario, which is undeterministic,
+    that would require measuring every child dynamically
+    in real-time. Doing so would slam the DOM with
+    layout thrashing (from calling child.getBoundingClientRect()).
+
+    Perhaps in the future, a more clever developer could
+    find a high performance way of measuring uniquely
+    sized children on the fly.
+  */
+  :host {
+    display: grid;
+    height:  100%;
   }
   
   :host([layout="vertical"]) {
-    flex-direction: column;
-    height:         100vh;
-    overflow-y:     visible;
+    height:     100vh;
+    overflow-y: visible;
   }
 
   :host([layout="horizontal"]) {
-    flex-direction: row;
-    overflow-x:     scroll;
-  }
-
-  .container {
-    min-width: var(--list-item-width);
-    width:     var(--list-item-width);
+    grid-auto-flow:    column;
+    grid-auto-columns: max-content;
+    overflow-x:        scroll;
   }
 
 </style>

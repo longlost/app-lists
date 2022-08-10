@@ -388,14 +388,14 @@
     protobufjs "^6.10.0"
     yargs "^16.2.0"
 
-"@longlost/app-core@^9.0.1":
-  version "9.0.1"
-  resolved "https://registry.yarnpkg.com/@longlost/app-core/-/app-core-9.0.1.tgz#1021c33f1dcecd25868b0bdd6d6ace514c915ad8"
-  integrity sha512-vax/WJOt8nqbBodJA++Rp/7McQg1EaxHYZO4ffiPEiNOWsrO++bIkvEA8KVG661hSyE337tG1cbEboIHQJZ9Fg==
+"@longlost/app-core@^9.0.4":
+  version "9.0.4"
+  resolved "https://registry.yarnpkg.com/@longlost/app-core/-/app-core-9.0.4.tgz#a36f0b74786062466bf08b0ed90d199e1231a941"
+  integrity sha512-nPg9UL3AoWSVZIWIgD9xQkI1K0NDbI7OKa/vTCEeNGKMl2eUOmqPGvhw3CIwGzURJh7LZrcFq4jy8421dvQ/+Q==
   dependencies:
     "@polymer/iron-iconset-svg" "^3.0.1"
     "@polymer/paper-styles" "^3.0.1"
-    "@polymer/polymer" "^3.5.0"
+    "@polymer/polymer" "^3.5.1"
     "@ungap/global-this" "^0.4.4"
     comlink "^4.3.1"
     firebase "^9.8.2"
@@ -446,10 +446,10 @@
   dependencies:
     "@webcomponents/shadycss" "^1.9.1"
 
-"@polymer/polymer@^3.5.0":
-  version "3.5.0"
-  resolved "https://registry.yarnpkg.com/@polymer/polymer/-/polymer-3.5.0.tgz#e2f35c9e8a03137de38c7fb608498b05c004f3c6"
-  integrity sha512-0OyN+LQ68tudbWYm7BeU4WELiqXvRn1HIpSnW0u7iFTdxJakJGLehh7PFgKL1noe9a0HHSKznQIfz+hMxzgBtA==
+"@polymer/polymer@^3.5.1":
+  version "3.5.1"
+  resolved "https://registry.yarnpkg.com/@polymer/polymer/-/polymer-3.5.1.tgz#4b5234e43b8876441022bcb91313ab3c4a29f0c8"
+  integrity sha512-JlAHuy+1qIC6hL1ojEUfIVD58fzTpJAoCxFwV5yr0mYTXV1H8bz5zy0+rC963Cgr9iNXQ4T9ncSjC2fkF9BQfw==
   dependencies:
     "@webcomponents/shadycss" "^1.9.1"
 

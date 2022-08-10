@@ -118,7 +118,7 @@
   *    
   *     The new value is used to calculate how many 
   *     reusable items will be created, based off how many
-  *     containers will fit inside an virtual container of this size.
+  *     containers will fit inside a virtual container of this size.
   *    
   *     A larger number will result in more offscreen containers,
   *     so there is a tradeoff between scrolling performance and
@@ -165,7 +165,7 @@
   *      
   *     The new value is used to calculate how many 
   *     reusable items will be created, based off how many
-  *     containers will fit inside an virtual container of this size.
+  *     containers will fit inside a virtual container of this size.
   *      
   *     A larger number will result in more offscreen containers,
   *     so there is a tradeoff between scrolling performance and
@@ -244,9 +244,36 @@ const sortHorizontalAscending = entries =>
                                   entries.sort((a, b) => 
                                     a.boundingClientRect.left - b.boundingClientRect.left);
 
+// Make sure that multi-container rows/columns (sections) 
+// are translated correctly to maintain proper layout.
+//
+// For example, given a 2 column vertical scroll layout,
+// if there are 4 elements available to move, the first two
+// will make up section '0' and the last two will be section '1'.
+const keepSectionState = per => {
+
+  let section;
+
+  return index => {
+
+    const remainder = index % per;
+
+    if (remainder === 0) { // Represents a new row/column.
+
+      if (section === undefined) {
+        section = 0;
+      }
+      else {
+        section += 1;
+      }
+    }
+
+    return section;
+  };
+};
 
 // Vertical layouts when scrolling down.
-const moveAvailableDown = (visible, hidden) => {
+const moveAvailableDown = (visible, hidden, per) => {
 
   const topVisible = head(visible);
 
@@ -262,6 +289,7 @@ const moveAvailableDown = (visible, hidden) => {
     }
 
     return accum;
+
   }, {availableToMove: [], notAvailable: []});
 
   if (!availableToMove.length) { return; }
@@ -272,13 +300,17 @@ const moveAvailableDown = (visible, hidden) => {
 
   const bottomRest = tail(rest);
   const {bottom}   = bottomRest.boundingClientRect;
+  const getSection = keepSectionState(per);
 
   availableToMove.forEach((entry, index) => {
+
     const {boundingClientRect, target} = entry;
     const {height, top}                = boundingClientRect;
 
+
     const previous = target.previous || 0;
-    const h        = height * index;
+    const section  = getSection(index);
+    const h        = height * section;
     const distance = previous + bottom - top + h;
 
     target.previous           = distance; // Cache for next move.
@@ -287,7 +319,7 @@ const moveAvailableDown = (visible, hidden) => {
 };
 
 // Vertical layouts when scrolling up.
-const moveAvailableUp = (visible, hidden) => {
+const moveAvailableUp = (visible, hidden, per) => {
 
   const bottomVisible = tail(visible);
 
@@ -307,6 +339,7 @@ const moveAvailableUp = (visible, hidden) => {
     }
 
     return accum;
+
   }, {availableToMove: [], notAvailable: []});
 
   if (!availableToMove.length) { return; }
@@ -315,10 +348,12 @@ const moveAvailableUp = (visible, hidden) => {
   // are still above the scroller (direction of scroll), if there are any.
   const rest = sortVerticalAscending([...notAvailable, ...visible]);
 
-  const topRest = head(rest);
-  const {top}   = topRest.boundingClientRect;
+  const topRest    = head(rest);
+  const {top}      = topRest.boundingClientRect;
+  const getSection = keepSectionState(per);
 
   availableToMove.forEach((entry, index) => {
+
     const {boundingClientRect, target} = entry;
     const {bottom, height}             = boundingClientRect;
 
@@ -326,7 +361,8 @@ const moveAvailableUp = (visible, hidden) => {
 
     if (previous === 0) { return; }
 
-    const h        = height * index;
+    const section  = getSection(index);
+    const h        = height * section;
     const distance = previous - (bottom - top) - h;
 
     if (distance < 0) { return; }
@@ -337,7 +373,7 @@ const moveAvailableUp = (visible, hidden) => {
 };
 
 // Horizontal layouts when scrolling left to right.
-const moveAvailableRight = (visible, hidden) => {
+const moveAvailableRight = (visible, hidden, per) => {
 
   const leftVisible = head(visible);
 
@@ -354,6 +390,7 @@ const moveAvailableRight = (visible, hidden) => {
     }
 
     return accum;
+
   }, {availableToMove: [], notAvailable: []});
 
   if (!availableToMove.length) { return; }
@@ -362,15 +399,18 @@ const moveAvailableRight = (visible, hidden) => {
   // are still to the right (direction of scroll), if there are any.
   const rest = sortHorizontalAscending([...visible, ...notAvailable]);
 
-  const rightRest = tail(rest);
-  const {right}   = rightRest.boundingClientRect;
+  const rightRest  = tail(rest);
+  const {right}    = rightRest.boundingClientRect;
+  const getSection = keepSectionState(per);
 
   availableToMove.forEach((entry, index) => {
+
     const {boundingClientRect, target} = entry;
     const {width, left}                = boundingClientRect;
 
     const previous = target.previous || 0;
-    const w        = width * index;
+    const section  = getSection(index);
+    const w        = width * section;
     const distance = previous + right - left + w;
 
     target.previous           = distance; // Cache for next move.
@@ -379,7 +419,7 @@ const moveAvailableRight = (visible, hidden) => {
 };
 
 // Horizontal layouts when scrolling right to left.
-const moveAvailableLeft = (visible, hidden) => {
+const moveAvailableLeft = (visible, hidden, per) => {
 
   const rightVisible = tail(visible);
 
@@ -399,6 +439,7 @@ const moveAvailableLeft = (visible, hidden) => {
     }
 
     return accum;
+
   }, {availableToMove: [], notAvailable: []});
 
   if (!availableToMove.length) { return; }
@@ -407,10 +448,12 @@ const moveAvailableLeft = (visible, hidden) => {
   // are still above the scroller, if there are any.
   const rest = sortHorizontalAscending([...notAvailable, ...visible]);
 
-  const leftRest = head(rest);
-  const {left}   = leftRest.boundingClientRect;
+  const leftRest   = head(rest);
+  const {left}     = leftRest.boundingClientRect;
+  const getSection = keepSectionState(per);
 
   availableToMove.forEach((entry, index) => {
+
     const {boundingClientRect, target} = entry;
     const {right, width}               = boundingClientRect;
 
@@ -418,7 +461,8 @@ const moveAvailableLeft = (visible, hidden) => {
 
     if (previous === 0) { return; }
 
-    const w        = width * index;
+    const section  = getSection(index);
+    const w        = width * section;
     const distance = previous - (right - left) - w;
 
     if (distance < 0) { return; }
@@ -505,7 +549,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
       _virtualIndex: {
         type: Number,
         value: 0,
-        computed: '__computeVirtualIndex(layout, _sampleBbox, _scroll)'
+        computed: '__computeVirtualIndex(layout, _sampleBbox, _containersPer, _scroll)'
       },
 
       _virtualStart: {
@@ -544,7 +588,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
     super.disconnectedCallback();
 
     window.removeEventListener('scroll', this.__windowScrollHandler);
-    this.removeEventListener('scroll',   this.__hostScrollHandler);
+    this.removeEventListener(  'scroll', this.__hostScrollHandler);
   }
 
 
@@ -627,7 +671,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
   }
 
 
-  __computeVirtualIndex(layout, sampleBbox, scroll) {
+  __computeVirtualIndex(layout, sampleBbox, per, scroll) {
 
     if (!layout || !sampleBbox || typeof scroll !== 'number') { return 0; }
 
@@ -637,8 +681,9 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
     const beginning = layout === 'vertical' ? top    : left;
     const dimension = layout === 'vertical' ? height : width;
+    const section   = Math.floor(Math.abs((scroll - beginning) / dimension));
 
-    return Math.floor(Math.abs((scroll - beginning) / dimension));
+    return section * per;
   }
 
 
@@ -666,11 +711,11 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
     if (layout === 'vertical') {
       this.removeEventListener('scroll', this.__hostScrollHandler);
-      window.addEventListener('scroll',  this.__windowScrollHandler);
+      window.addEventListener( 'scroll', this.__windowScrollHandler);
     }
     else {
       window.removeEventListener('scroll', this.__windowScrollHandler);
-      this.addEventListener('scroll',      this.__hostScrollHandler);
+      this.addEventListener(     'scroll', this.__hostScrollHandler);
     }
   }
 
@@ -697,7 +742,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
     this._entries = undefined;
     this._entries = temp;
   }
-
+  
 
   async __moveAvailableContainers(sorted) {
 
@@ -707,10 +752,13 @@ class RecycledList extends DomObserversMixin(AppElement) {
       !sorted.length   || 
       !this._hidden    || 
       !this._hidden.length
-    ) { return; }
+    ) { 
+      return; 
+    }
 
     // This corrects for screen orientation/resize changes.
     if (this._needsRepositioning) {
+
       this._needsRepositioning = false;
 
       await schedule();
@@ -720,7 +768,12 @@ class RecycledList extends DomObserversMixin(AppElement) {
       return;
     }
 
-    if (this._stopRecycling && (this._direction === 'down' || this._direction === 'right')) { return; }
+    if (
+      this._stopRecycling && 
+      (this._direction === 'down' || this._direction === 'right')
+    ) { 
+      return; 
+    }
 
     // This rare state happens when IntersectionObserver hasn't 
     // updated the state of all containers yet, 
@@ -729,7 +782,8 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
     const {sortedHidden, sortedVisible} = sorted.reduce((accum, entry) => {
 
-      const match = this._hidden.find(obj => obj.target === entry.target);
+      const match = this._hidden.find(obj => 
+                      obj.target === entry.target);
 
       if (match) {
         accum.sortedHidden.push(entry);
@@ -739,6 +793,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
       }
 
       return accum;
+
     }, {sortedHidden: [], sortedVisible: []});
 
     // An erroneous state, where there are no 
@@ -749,23 +804,23 @@ class RecycledList extends DomObserversMixin(AppElement) {
     switch (this._direction) {
 
       case 'down':
-        moveAvailableDown(sortedVisible, sortedHidden);
+        moveAvailableDown(sortedVisible, sortedHidden, this._containersPer);
         break;
 
       case 'up':
-        moveAvailableUp(sortedVisible, sortedHidden);
+        moveAvailableUp(sortedVisible, sortedHidden, this._containersPer);
         break;
 
       case 'right':
-        moveAvailableRight(sortedVisible, sortedHidden);
+        moveAvailableRight(sortedVisible, sortedHidden, this._containersPer);
         break;
 
       case 'left':
-        moveAvailableLeft(sortedVisible, sortedHidden);
+        moveAvailableLeft(sortedVisible, sortedHidden, this._containersPer);
         break;
 
       default:
-        throw new Error(`The 'direction' argument value is unrecognized.`);
+        throw new Error(`The '_direction' argument value is unrecognized.`);
     }
   }
 
@@ -815,6 +870,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
     if (!data) { return; }
 
     if (!this._sorted) { 
+
       this._currentItems = data;
       return;
     }
@@ -823,13 +879,16 @@ class RecycledList extends DomObserversMixin(AppElement) {
     // happens before the container elements are resorted properly,
     // so ignore this erroneous state.
     if (this._skipCurrentItemsUpdate) {
+
       this._skipCurrentItemsUpdate = false;
       return;
     }
 
     // Arrange data according to container order.
     this._currentItems = this._sorted.reduce((accum, entry, index) => {
+
       accum[entry.target.index] = data[index];
+
       return accum;
     }, []);
   }
@@ -850,6 +909,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
   __updateVirtualStart(sorted) {
 
     if (!sorted || !this._virtualIndex) {
+
       this._virtualStart = 0;
       return;
     }

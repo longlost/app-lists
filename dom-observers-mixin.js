@@ -95,6 +95,12 @@ export const DomObserversMixin = superClass => {
           value: 4
         },
 
+        _containerCount: {
+          type: Number,
+          value: 1,
+          computed: '__computeContainerCount(items.length, _maxContainerCount)'
+        },
+
         // Wrapper elements for repeated slots.
         // The total stamped DOM containers that are present once 
         // the number of items that will fill the host has been determined.
@@ -103,10 +109,11 @@ export const DomObserversMixin = superClass => {
           observer: '__containersChanged'
         },
 
-        _containerCount: {
+        // Containers per row for 'vertical' layouts, or per column for 'horizontal'.
+        _containersPer: {
           type: Number,
           value: 1,
-          computed: '__computeContainerCount(items.length, _maxContainerCount)'
+          computed: '__computeContainersPer(layout, _hostBbox, _sampleBbox)'
         },
 
         // The total set of IntersectionObserverEntry objects for every DOM element container.
@@ -148,7 +155,7 @@ export const DomObserversMixin = superClass => {
         // given the particular layout, host size plus margin and item size.
         _maxContainerCount: {
           type: Number,
-          computed: '__computeMaxContainerCount(layout, hMargin, wMargin, _hostBbox, _sampleBbox)'
+          computed: '__computeMaxContainerCount(layout, hMargin, wMargin, _hostBbox, _sampleBbox, _containersPer)'
         },     
 
         _resizeObserver: Object,
@@ -203,6 +210,25 @@ export const DomObserversMixin = superClass => {
     __computeContainerCount(length = 1, max = 1) {
 
       return Math.min(length, max);
+    }
+
+    // This ui element must be aware of the layout of its children contianers
+    // so that it can place them properly in the same layout.
+    // For example, if there are 2 items per row, in a vertical scrolling
+    // configuration, the element will translate containers in sets of 2.
+    __computeContainersPer(layout, hostBbox, sampleBbox) {
+
+      if (!layout || !hostBbox || !sampleBbox) { return 1; }
+
+      if (layout === 'vertical') {
+        return Math.max(Math.floor(hostBbox.width / sampleBbox.width), 1);
+      }
+
+      if (layout === 'horizontal') {        
+        return Math.max(Math.floor(hostBbox.height / sampleBbox.height), 1);
+      }
+
+      return 1;
     }
 
 
@@ -297,7 +323,7 @@ export const DomObserversMixin = superClass => {
     }
 
 
-    __computeMaxContainerCount(layout, hMargin, wMargin, hostBbox, sampleBbox) {
+    __computeMaxContainerCount(layout, hMargin, wMargin, hostBbox, sampleBbox, per) {
 
       if (!layout || !hostBbox || !sampleBbox) { return 1; }
 
@@ -306,15 +332,21 @@ export const DomObserversMixin = superClass => {
       if (!height || !width) { return 1; }
 
       if (layout === 'vertical') {
-        const multiplier = hMargin || 2;
 
-        return Math.ceil((hostBbox.height * Math.max(multiplier, 1.5)) / height);
+        const defaulted = hMargin || 2;
+        const margin    = Math.max(defaulted, 1.5);
+        const sections  = Math.ceil((hostBbox.height * margin) / height);
+
+        return sections * per;
       }
 
       if (layout === 'horizontal') {
-        const multiplier = wMargin || 4;
+        
+        const defaulted = wMargin || 4;
+        const margin    = Math.max(defaulted, 1.5);
+        const sections  = Math.ceil((hostBbox.width * margin) / width);
 
-        return Math.ceil((hostBbox.width * Math.max(multiplier, 1.5)) / width);
+        return sections * per;
       }
 
       return 1;
