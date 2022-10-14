@@ -1,6 +1,6 @@
 
 /**
-  * `recycled-list`
+  * `lite-list`
   * 
   *   This element displays list items in a high performance scroller.
   *   
@@ -14,10 +14,10 @@
   *  Example Usage:
   *
   *
-  *   pup-list.js
+  *   my-polymer-elements/pup-list.js
   *
   *   ```
-  *     import '@longlost/app-lists/recycled-list.js';
+  *     import '@longlost/app-lists/lite-list.js';
   *
   *   ...
   *
@@ -68,16 +68,17 @@
   *  
   *   ```
   *
-  *   pup-list.html
+  *   my-polymer-elements/pup-list.html
   *
   *   ```
   *
   *     <style>
+  * 
+  *       lite-list {
+  *         grid-auto-rows: 150px; <-- Force identical sized children.
+  *       }
   *
   *       .item {
-  *         min-height:       128px;
-  *         min-width:        calc(100vw - 64px);
-  *         margin-right:     8px;
   *         padding:          16px;
   *         border-bottom:    2px solid lightgray;
   *         background-color: white;
@@ -87,9 +88,9 @@
   *     </style>
   *
   *  
-  *     <recycled-list infinite
+  *     <lite-list infinite
   *                    items="[[items]]"
-  *                    on-recycled-list-current-items-changed="__itemsChangedHandler">
+  *                    on-lite-list-current-items-changed="__itemsChangedHandler">
   *
   *       <template is="dom-repeat" 
   *                 items="[[_items]]">
@@ -102,7 +103,7 @@
   *
   *       </template>
   *
-  *     </recycled-list>
+  *     </lite-list>
   *
   *   ```
   *
@@ -110,28 +111,6 @@
   *
   *  Properties:
   *
-  *
-  *   hMargin - Optional, Number, Default: 2
-  *
-  *     The height of `recycled-list` is multiplied by
-  *     this number when stamping reusable containers.  
-  *    
-  *     The new value is used to calculate how many 
-  *     reusable items will be created, based off how many
-  *     containers will fit inside a virtual container of this size.
-  *    
-  *     A larger number will result in more offscreen containers,
-  *     so there is a tradeoff between scrolling performance and
-  *     memory/computational load.
-  *      
-  *     When tuning rendering performance, this number should scale 
-  *     in proportion to the height of individual repeated containers.
-  *      
-  *     Increase this number for taller containers that take up a 
-  *     large portion of the viewport.
-  *      
-  *     The lower bounds of this number is clamped at 1.5.
-  *    
   *
   *
   *   infinite - Optional, Boolean, Default: undefined
@@ -158,9 +137,9 @@
   *
   *
   *    
-  *   wMargin - Optional, Number, Default: 4
+  *   margin - Optional, Number, Default: 4
   *    
-  *     The width of `recycled-list` is multiplied by
+  *     The size of `lite-list` is multiplied by
   *     this number when stamping reusable containers. 
   *      
   *     The new value is used to calculate how many 
@@ -172,9 +151,9 @@
   *     memory/computational load.
   *      
   *     When tuning rendering performance, this number should scale 
-  *     in proportion to the width of individual repeated containers.
+  *     in proportion to the size of individual repeated containers.
   *      
-  *     Increase this number for wider containers that take up a 
+  *     Increase this number for containers that take up a 
   *     large portion of the viewport.
   *      
   *     The lower bounds of this number is clamped at 1.5.
@@ -185,7 +164,7 @@
   *  Events:
   *
   *
-  *   'recycled-list-current-items-changed', {value: items}
+  *   'lite-list-current-items-changed', {value: items}
   *
   *     Detail value is an array which is a subset of the provided 'items' array. 
   *     This array MUST drive the external template repeater, to keep items 
@@ -193,7 +172,7 @@
   *
   *
   * 
-  *   'recycled-list-pagination-changed', {value: {count, end, start}} 
+  *   'lite-list-pagination-changed', {value: {count, end, start}} 
   *
   *     Detail value is an object that contains 'count' 
   *     (number of recycled containers), 'start' and 'end' indexes.
@@ -203,7 +182,7 @@
   *
   *
   *
-  *   'recycled-list-sample-bbox-changed', {value: DOMRect} 
+  *   'lite-list-sample-bbox-changed', {value: DOMRect} 
   *
   *     Detail value is a DOMRect object from the initial instance of a slotted child. 
   *     This info is used internally to determine how many recycleable elements to stamp out.
@@ -222,260 +201,37 @@ import {AppElement} from '@longlost/app-core/app-element.js';
 
 import {DomObserversMixin} from './dom-observers-mixin.js';
 
-import {
-  head,
-  tail
-} from '@longlost/app-core/lambda.js';
+import {head, tail} from '@longlost/app-core/lambda.js';
 
 import {
   consumeEvent,
-  schedule
+  schedule,
 } from '@longlost/app-core/utils.js';
 
-import template from './recycled-list.html';
+import template from './lite-list.html';
 
 
-const sortVerticalAscending = entries => 
-                                entries.sort((a, b) => 
-                                  a.boundingClientRect.top - b.boundingClientRect.top);
+const filterAvailable = ({direction, hidden, layout, visible}) => {
 
-
-const sortHorizontalAscending = entries => 
-                                  entries.sort((a, b) => 
-                                    a.boundingClientRect.left - b.boundingClientRect.left);
-
-// Make sure that multi-container rows/columns (sections) 
-// are translated correctly to maintain proper layout.
-//
-// For example, given a 2 column vertical scroll layout,
-// if there are 4 elements available to move, the first two
-// will make up section '0' and the last two will be section '1'.
-const keepSectionState = per => {
-
-  let section;
-
-  return index => {
-
-    const remainder = index % per;
-
-    if (remainder === 0) { // Represents a new row/column.
-
-      if (section === undefined) {
-        section = 0;
-      }
-      else {
-        section += 1;
-      }
-    }
-
-    return section;
-  };
-};
-
-// Vertical layouts when scrolling down.
-const moveAvailableDown = (visible, hidden, per) => {
-
-  const topVisible = head(visible);
+  const reference      = direction === 'forward'  ? head(visible) : tail(visible);
+  const refDim         = layout    === 'vertical' ? 'top'         : 'left';
+  const entryDim       = layout    === 'vertical' ? 'bottom'      : 'right';
+  const refMeasurement = reference.boundingClientRect[refDim];
 
   // Hidden items that are above the scroller can be moved down.
   // Hidden items that are still below the fold need to stay where they are.
-  const {availableToMove, notAvailable} = hidden.reduce((accum, entry) => {
+  if (direction === 'forward') {
 
-    if (entry.boundingClientRect.bottom <= topVisible.boundingClientRect.top) {
-      accum.availableToMove.push(entry);
-    }
-    else {
-      accum.notAvailable.push(entry);
-    }
+    return hidden.filter(entry => entry.boundingClientRect[entryDim] <= refMeasurement);
+  }
 
-    return accum;
-
-  }, {availableToMove: [], notAvailable: []});
-
-  if (!availableToMove.length) { return; }
-
-  // Combine visible items with hidden items that 
-  // are still below the fold (direction of scroll), if there are any.
-  const rest = sortVerticalAscending([...visible, ...notAvailable]);
-
-  const bottomRest = tail(rest);
-  const {bottom}   = bottomRest.boundingClientRect;
-  const getSection = keepSectionState(per);
-
-  availableToMove.forEach((entry, index) => {
-
-    const {boundingClientRect, target} = entry;
-    const {height, top}                = boundingClientRect;
-
-
-    const previous = target.previous || 0;
-    const section  = getSection(index);
-    const h        = height * section;
-    const distance = previous + bottom - top + h;
-
-    target.previous           = distance; // Cache for next move.
-    target.style['transform'] = `translateY(${distance}px)`;
-  });
-};
-
-// Vertical layouts when scrolling up.
-const moveAvailableUp = (visible, hidden, per) => {
-
-  const bottomVisible = tail(visible);
-
-  // Hidden items that are below the scroller can be moved up.
-  // Hidden items that are still above the scroller need to stay where they are.
-  const {availableToMove, notAvailable} = hidden.reduce((accum, entry) => {
-
-    if (entry.boundingClientRect.top >= bottomVisible.boundingClientRect.bottom) {
-
-      // Reverse the array so items can be 'stacked' properly
-      // in the 'forEach' function below, which uses the index
-      // as a multiplier with each stacked container's height.
-      accum.availableToMove.unshift(entry);
-    }
-    else {
-      accum.notAvailable.push(entry);
-    }
-
-    return accum;
-
-  }, {availableToMove: [], notAvailable: []});
-
-  if (!availableToMove.length) { return; }
-
-  // Combine visible items with hidden items that 
-  // are still above the scroller (direction of scroll), if there are any.
-  const rest = sortVerticalAscending([...notAvailable, ...visible]);
-
-  const topRest    = head(rest);
-  const {top}      = topRest.boundingClientRect;
-  const getSection = keepSectionState(per);
-
-  availableToMove.forEach((entry, index) => {
-
-    const {boundingClientRect, target} = entry;
-    const {bottom, height}             = boundingClientRect;
-
-    const previous = target.previous || 0;
-
-    if (previous === 0) { return; }
-
-    const section  = getSection(index);
-    const h        = height * section;
-    const distance = previous - (bottom - top) - h;
-
-    if (distance < 0) { return; }
-
-    target.previous           = distance; // Cache for next move.
-    target.style['transform'] = `translateY(${distance}px)`;
-  });
-};
-
-// Horizontal layouts when scrolling left to right.
-const moveAvailableRight = (visible, hidden, per) => {
-
-  const leftVisible = head(visible);
-
-  // Hidden items that are to the left of the scroller can be moved right.
-  // Hidden items that are still to the right 
-  // of the scroller need to stay where they are.
-  const {availableToMove, notAvailable} = hidden.reduce((accum, entry) => {
-
-    if (entry.boundingClientRect.right <= leftVisible.boundingClientRect.left) {
-      accum.availableToMove.push(entry);
-    }
-    else {
-      accum.notAvailable.push(entry);
-    }
-
-    return accum;
-
-  }, {availableToMove: [], notAvailable: []});
-
-  if (!availableToMove.length) { return; }
-
-  // Combine visible items with hidden items that 
-  // are still to the right (direction of scroll), if there are any.
-  const rest = sortHorizontalAscending([...visible, ...notAvailable]);
-
-  const rightRest  = tail(rest);
-  const {right}    = rightRest.boundingClientRect;
-  const getSection = keepSectionState(per);
-
-  availableToMove.forEach((entry, index) => {
-
-    const {boundingClientRect, target} = entry;
-    const {width, left}                = boundingClientRect;
-
-    const previous = target.previous || 0;
-    const section  = getSection(index);
-    const w        = width * section;
-    const distance = previous + right - left + w;
-
-    target.previous           = distance; // Cache for next move.
-    target.style['transform'] = `translateX(${distance}px)`;
-  });
-};
-
-// Horizontal layouts when scrolling right to left.
-const moveAvailableLeft = (visible, hidden, per) => {
-
-  const rightVisible = tail(visible);
-
-  // Hidden items that are to the right of the scroller can be moved left.
-  // Hidden items that are still left of the scroller need to stay where they are.
-  const {availableToMove, notAvailable} = hidden.reduce((accum, entry) => {
-
-    if (entry.boundingClientRect.left >= rightVisible.boundingClientRect.right) {
-
-      // Reverse the array so items can be 'stacked' properly
-      // in the 'forEach' function below, which uses the index
-      // as a multiplier with each stacked container's width.
-      accum.availableToMove.unshift(entry);
-    }
-    else {
-      accum.notAvailable.push(entry);
-    }
-
-    return accum;
-
-  }, {availableToMove: [], notAvailable: []});
-
-  if (!availableToMove.length) { return; }
-
-  // Combine visible items with hidden items that 
-  // are still above the scroller, if there are any.
-  const rest = sortHorizontalAscending([...notAvailable, ...visible]);
-
-  const leftRest   = head(rest);
-  const {left}     = leftRest.boundingClientRect;
-  const getSection = keepSectionState(per);
-
-  availableToMove.forEach((entry, index) => {
-
-    const {boundingClientRect, target} = entry;
-    const {right, width}               = boundingClientRect;
-
-    const previous = target.previous || 0;
-
-    if (previous === 0) { return; }
-
-    const section  = getSection(index);
-    const w        = width * section;
-    const distance = previous - (right - left) - w;
-
-    if (distance < 0) { return; }
-
-    target.previous           = distance; // Cache for next move.
-    target.style['transform'] = `translateX(${distance}px)`;
-  });
+  return hidden.filter(entry => entry.boundingClientRect[entryDim] >= refMeasurement);
 };
 
 
-class RecycledList extends DomObserversMixin(AppElement) {
+class LiteList extends DomObserversMixin(AppElement) {
 
-  static get is() { return 'recycled-list'; }
+  static get is() { return 'lite-list'; }
 
   static get template() {
     return template;
@@ -502,7 +258,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
       // A subset of provided 'items' that represents the currently
       // visible set of virtual elements. This is a slice of the 
-      // 'items' array, used by parent implementing 'recycled-list',
+      // 'items' array, used by parent implementing 'lite-list',
       // to keep its mirrored template repeater items in sync with 
       // the one used in this element's Shadow DOM.
       _currentItems: Array,
@@ -518,32 +274,53 @@ class RecycledList extends DomObserversMixin(AppElement) {
         observer: '__directionChanged'
       },
 
+      _maxSize: {
+        type: Number,
+        computed: '__computeMaxSize(infinite, items.length, _containersPer, _sampleSize)'
+      },
+
       // This becomes true when the amount of containers changes.
       // Necessary to correct for screen rotation/resizes.
       _needsRepositioning: Boolean,
 
-      // This current scrolled distance of the host element.
+      // This current scrolled distance of the host element or window.
       _scroll: {
         type: Number,
         observer: '__scrollChanged'
+      },
+
+      _sections: {
+        type: Number,
+        computed: '__computeSections(_containerCount, _containersPer)'
       },
 
       _skipCurrentItemsUpdate: Boolean,
 
       _sorted: {
         type: Array,
-        computed: '__computeSorted(layout, _containers, _hidden)'
+        computed: '__computeSorted(_containers, _hidden, _side)'
       },
 
       _start: {
         type: Number,
         value: 0,
-        computed: '__computeStart(infinite, items, _virtualStart)'
+        computed: '__computeStart(infinite, items.length, _virtualStart)'
       },
 
       _stopRecycling: {
         type: Boolean,
         computed: '__computeStopRecycling(infinite, items, _containerCount, _virtualStart)'
+      },
+
+      _translate: {
+        type: String,
+        value: 'translateY', // or 'translateX'
+        computed: '__computeTranslate(layout)'
+      },
+
+      _travel: {
+        type: Number,
+        computed: '__computeTravel(_sampleSize, _sections)'
       },
 
       _virtualIndex: {
@@ -626,29 +403,42 @@ class RecycledList extends DomObserversMixin(AppElement) {
     return items.slice(start, end);
   }
 
-  // Get live position measurements, sort by position,
-  // and create a collection that is similar to 
-  // IntersectionObserverEntry to standardize the api.
-  __computeSorted(layout, containers, hidden) {
+  // undefined return values to be ignored.
+  __computeMaxSize(infinite, length, per, size) {
 
-    if (!layout || !containers || !hidden) { return; }
+    if (infinite || !length || !per || !size) { return; }
 
-    const entries = containers.map(container => ({
-      boundingClientRect: container.getBoundingClientRect(),
-      target:             container
-    }));
-
-    return layout === 'vertical' ? 
-             sortVerticalAscending(entries) : 
-             sortHorizontalAscending(entries);
+    return size * Math.ceil(length / per);
   }
 
 
-  __computeStart(infinite, items, virtualStart) {
+  __computeSections(count, per) {
 
-    if (!items || !items.length) { return 0; }
+    if (!count || !per) { return; }
 
-    const length = items.length;
+    return Math.ceil(count / per);
+  }
+
+  // Get live position measurements and create a 
+  // collection that is similar to IntersectionObserverEntry 
+  // to standardize the api, then sort by position.
+  __computeSorted(containers, hidden, side) {
+
+    if (!containers || !hidden || !side) { return; }
+
+    return containers.
+             map(container => ({
+               boundingClientRect: container.getBoundingClientRect(),
+               target:             container
+             })).
+             sort((a, b) => // Sort ascending.
+               a.boundingClientRect[side] - b.boundingClientRect[side]);
+  }
+
+
+  __computeStart(infinite, length, virtualStart) {
+
+    if (!length) { return 0; }
 
     // Number of iteration cycles over 'items'.
     const multiple = Math.floor(virtualStart / length);
@@ -671,6 +461,20 @@ class RecycledList extends DomObserversMixin(AppElement) {
   }
 
 
+  __computeTranslate(layout) {
+
+    return layout === 'vertical' ? 'translateY' : 'translateX';
+  }
+
+
+  __computeTravel(size, sections) {
+
+    if (!size || !sections) { return; }
+
+    return size * sections;
+  }
+
+
   __computeVirtualIndex(layout, sampleBbox, per, scroll) {
 
     if (!layout || !sampleBbox || typeof scroll !== 'number') { return 0; }
@@ -680,8 +484,8 @@ class RecycledList extends DomObserversMixin(AppElement) {
     if (!height || !width) { return 0; }
 
     const beginning = layout === 'vertical' ? top    : left;
-    const dimension = layout === 'vertical' ? height : width;
-    const section   = Math.floor(Math.abs((scroll - beginning) / dimension));
+    const size      = layout === 'vertical' ? height : width;
+    const section   = Math.floor(Math.abs((scroll - beginning) / size));
 
     return section * per;
   }
@@ -691,7 +495,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
     if (!items) { return; }
 
-    this.fire('recycled-list-current-items-changed', {value: items});
+    this.fire('lite-list-current-items-changed', {value: items});
   }
 
   // When changing scroll direction, the first change to this._data
@@ -719,20 +523,41 @@ class RecycledList extends DomObserversMixin(AppElement) {
     }
   }
 
+
+  __move(container, position) {
+
+    container.previous           = position; // Cache for next move.
+    container.style['transform'] = `${this._translate}(${position}px)`;
+  }
+
   // Correct the position of containers when some have been removed or added.
   // This commonly occurs after screen rotation or resize changes.
-  __repositionContainers() {
+  //
+  // Also used to correct for programmic scrolling by 'moveToIndex' public method.
+  __reposition() {
 
     if (typeof this._containerIndex !== 'number' || !this._virtualIndex) { return; }
 
-    const translate = this.layout === 'vertical' ? 'translateY' : 'translateX';
-    const reference = head(this._containers);
-    const {height}  = reference.getBoundingClientRect();
-    const position  = height * (this._virtualIndex - this._containerIndex);
+    const section   = (this._virtualIndex - this._containerIndex) / this._containersPer;
+    const position  = this._sampleSize * section;
 
-    this._containers.forEach(el => {
-      el.previous           = position;
-      el.style['transform'] = `${translate}(${position}px)`;
+    this._sorted.forEach(entry => {
+
+      const {boundingClientRect, target} = entry;
+
+      const previous = target.previous || 0;
+      const travel   = position - previous;
+
+      // Calculate the future position. 
+      const placement = boundingClientRect[this._side] + travel + this._scroll;
+
+      // Always move in 'infinite' mode.
+      //
+      // Do not exceed the maximum distance
+      // when out of 'infinite' mode.
+      if (!this.infinite && placement >= this._maxSize) { return; }
+
+      this.__move(target, position);
     });
 
     // Force a new set of calculations that place 
@@ -742,6 +567,64 @@ class RecycledList extends DomObserversMixin(AppElement) {
     this._entries = undefined;
     this._entries = temp;
   }
+
+
+  __forward(grouped) {
+
+    const available = filterAvailable({
+                        ...grouped,
+                        direction: 'forward',
+                        layout:     this.layout
+                      });
+
+    if (!available.length) { return; }
+
+    available.forEach(entry => {
+
+      const {boundingClientRect, target} = entry;
+
+      // Calculate the future position.    
+      // 'top' is relative to the viewport, so it can be a negative value.
+      const placement = boundingClientRect[this._side] + this._travel + this._scroll;
+
+      // Always move in 'infinite' mode.
+      //
+      // Do not exceed the maximum distance
+      // when out of 'infinite' mode.
+      if (!this.infinite && placement >= this._maxSize) { return; }
+
+      const previous = target.previous || 0;
+      const position = previous + this._travel;
+
+      this.__move(target, position);
+    });
+  }
+
+
+  __reverse(grouped) {
+
+    const available = filterAvailable({
+                        ...grouped,
+                        direction: 'reverse', 
+                        layout:     this.layout
+                      });
+
+    if (!available.length) { return; }
+
+    available.forEach(entry => {
+
+      const {target} = entry;
+      const previous = target.previous || 0;
+
+      if (previous === 0) { return; }
+
+      const position = previous - this._travel;
+
+      if (position < 0) { return; }
+
+      this.__move(target, position);
+    });
+  };
   
 
   async __moveAvailableContainers(sorted) {
@@ -763,7 +646,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
       await schedule();
 
-      this.__repositionContainers();
+      this.__reposition();
 
       return;
     }
@@ -780,54 +663,38 @@ class RecycledList extends DomObserversMixin(AppElement) {
     // and so is an erroneous state that must be ignored.
     if (this._hidden.length === sorted.length) { return; }
 
-    const {sortedHidden, sortedVisible} = sorted.reduce((accum, entry) => {
+    const grouped = sorted.reduce((accum, entry) => {
 
       const match = this._hidden.find(obj => 
                       obj.target === entry.target);
 
       if (match) {
-        accum.sortedHidden.push(entry);
+        accum.hidden.push(entry);
       }
       else {
-        accum.sortedVisible.push(entry);
+        accum.visible.push(entry);
       }
 
       return accum;
 
-    }, {sortedHidden: [], sortedVisible: []});
+    }, {hidden: [], visible: []});
 
     // An erroneous state, where there are no 
     // visible elements, that must be ignored.
-    if (sortedVisible.length === 0) { return; }
+    if (grouped.visible.length === 0) { return; }
 
-    // Translate containers according to scroll direction.
-    switch (this._direction) {
-
-      case 'down':
-        moveAvailableDown(sortedVisible, sortedHidden, this._containersPer);
-        break;
-
-      case 'up':
-        moveAvailableUp(sortedVisible, sortedHidden, this._containersPer);
-        break;
-
-      case 'right':
-        moveAvailableRight(sortedVisible, sortedHidden, this._containersPer);
-        break;
-
-      case 'left':
-        moveAvailableLeft(sortedVisible, sortedHidden, this._containersPer);
-        break;
-
-      default:
-        throw new Error(`The '_direction' argument value is unrecognized.`);
+    if (this._direction === 'down' || this._direction === 'right') {
+      this.__forward(grouped);
+    }
+    else { // _direction === 'up' or 'left'.
+      this.__reverse(grouped);
     }
   }
 
 
   __sampleBboxChanged(bbox) {
 
-    this.fire('recycled-list-sample-bbox-changed', {value: bbox});
+    this.fire('lite-list-sample-bbox-changed', {value: bbox});
   }
 
 
@@ -843,7 +710,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
     // Programmic scrolling includes built in scroll to top functionality 
     // on Apple touch devices (when top of ui chrome is tapped), as
     // well as calls to window.scrollTo(0).
-    if (newVal === 0 && oldVal && this._containers) {
+    if (newVal === 0 && oldVal > 0 && this._containers) {
 
       this._containers.forEach(el => {
         el.previous           = 0;
@@ -896,7 +763,7 @@ class RecycledList extends DomObserversMixin(AppElement) {
 
   __updatePagination(index, count) {
 
-    this.fire('recycled-list-pagination-changed', {
+    this.fire('lite-list-pagination-changed', {
       value: {
         count,
         end:   index + count, 
@@ -952,6 +819,72 @@ class RecycledList extends DomObserversMixin(AppElement) {
     this._containers = this.selectAll('.container');
   }
 
+  // In order to scroll to far offscreen positions, 
+  // that currently have no content, first grow the size of 
+  // the scroller before scrolling to the correct position.
+  __scrollToIndex(index, behavior) {
+
+    // Returns the column/row aware section index from an absolute index.
+    // Num --> Num
+    const getSection = i => Math.floor(i / this._containersPer);
+
+    const requestedSection = getSection(index);
+    const distance         = this._sampleSize * requestedSection;
+    const requestedSize    = distance + this._hostSize;
+    const maxSection       = getSection(this.items.length);
+    const maxSize          = this._sampleSize * maxSection;
+    const size             = this.infinite ? 
+                               requestedSize :
+
+                               // Toward the end of the list, limit 
+                               // the size of the scroller so we 
+                               // don't scroll past the last item.
+                               Math.min(requestedSize, maxSize);
+
+    // Host's ::before psuedo element.
+    const beginning = this.layout === 'vertical' ? this._hostBbox.top : 0;
+    const scroll    = beginning + distance;
+
+    // Grow the ::before pseudo element in preparation for scrolling
+    // beyond the original height of the host container.
+    if (this.layout === 'vertical') {
+
+      this.updateStyles({
+        '--before-height': `${size}px`,
+        '--before-width':  'unset'
+      });
+
+      window.scroll({top: scroll, left: 0, behavior});
+    }
+    else {
+
+      this.updateStyles({
+        '--before-height': 'unset',
+        '--before-width':  `${size}px`
+      });
+
+      this.scroll({top: 0, left: scroll, behavior});
+    }    
+  }
+
+
+  // Smooth scrolling move to an item by its index.
+  animateToIndex(index) {
+
+    this.__scrollToIndex(index, 'smooth');
+  }
+
+
+  // Instant move to an item by its index.
+  async moveToIndex(index) { 
+
+    this.__scrollToIndex(index, 'instant'); 
+
+    await schedule();
+
+    this.__reposition();
+  }
+
 }
 
-window.customElements.define(RecycledList.is, RecycledList);
+window.customElements.define(LiteList.is, LiteList);

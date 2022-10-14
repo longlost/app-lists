@@ -1,30 +1,54 @@
 # app-lists
 
-A collection of custom elements, each designed to work with a list of DOM elements.
+A collection of custom elements, each designed to work with a list of similar DOM elements.
 
 
-## \<app-carousel\>
+## \<drag-drop-list\>
+ 
+  This element allows list items to be rearranged via drag-and-drop.
+   
+  
+
+### Example Usage
+
+
+  my-elements/my-list.html
+
+
+  ```
+
+  <drag-drop-list sortable=".sortable-class">
+    <template is="dom-repeat" items="[[items]]">
+      <div class="sortable-class">
+        <img src$="[[item]]"/>
+      </div>
+    </template>
+  </drag-drop-list>
+
+  ```
+
+## \<lite-list\>
  
   This element displays list items in a high performance scroller.
    
-  The list items are recycled so that the number of DOM elements remains low
-  even for very large lists.
+  The list items are recycled so that the number of DOM elements remains low even for very large lists.
 
 
 ### Example Usage
 
 
-  pup-list.js
+  my-elements/pup-list.js
 
   ```
-    import '@longlost/app-lists/recycled-list.js';
+
+  import '@longlost/app-lists/lite-list.js';
 
     ...
 
     static get properties() {
       return {
 
-        // Master list input collection.
+        // Main input collection.
         items: {
           type: Array,
           value: [
@@ -68,40 +92,38 @@ A collection of custom elements, each designed to work with a list of DOM elemen
 
   ```
 
-  pup-list.html
+  my-elements/pup-list.html
 
   ```
 
-    <style>
+  <style>
 
-      .item {
-        min-height:       128px;
-        min-width:        calc(100vw - 64px);
-        margin-right:     8px;
-        padding:          16px;
-        border-bottom:    2px solid lightgray;
-        background-color: white;
-        color:            black;
-      }
+    .item {
+      height:           176px;
+      padding:          16px;
+      border-bottom:    2px solid lightgray;
+      background-color: white;
+      color:            black;
+    }
 
-    </style>
+  </style>
 
 
-    <recycled-list infinite
-                   items="[[items]]"
-                   on-recycled-list-current-items-changed="__itemsChangedHandler">
+  <lite-list infinite
+             items="[[items]]"
+             on-lite-list-current-items-changed="__itemsChangedHandler">
 
-      <template is="dom-repeat" 
-                items="[[_items]]">
+    <template is="dom-repeat" 
+              items="[[_items]]">
 
-        <div class="item" 
-             slot$="slot-[[index]]">
-          <h2>[[item.name]]</h2>
-          <p>Recycled item [[index]]</p>
-        </div>
+      <div class="item" 
+           slot$="slot-[[index]]">
+        <h2>[[item.name]]</h2>
+        <p>Recycled item [[index]]</p>
+      </div>
 
-      </template>
+    </template>
 
-    </recycled-list>
+  </lite-list>
 
   ```
