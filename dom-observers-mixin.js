@@ -2,7 +2,7 @@
 /**
   * `DomObserversMixin`
   * 
-  *   Intersection and Resize Observer api logic for `recycled-list`.
+  *   Intersection and Resize Observer api logic for `lite-list`.
   *
   *
   *
@@ -26,6 +26,25 @@
 import {head} from '@longlost/app-core/lambda.js';
 
 
+const getMargin = ({hostSide, hostSize, margin, sampleSide, sampleSize}) => {
+
+  if (!hostSide || !hostSize || !margin || !sampleSide || !sampleSize) { return; }
+
+  const diff = sampleSize - hostSize;
+
+  // Special care must be taken with IntersectionObserver
+  // when the child containers are larger than the host.
+  if (diff > 0) {
+
+    const offset = Math.max((sampleSide - hostSide), 0);
+    
+    return `${sampleSize + offset}px`;
+  }
+
+  return `${margin * 25}%`;
+};
+
+
 export const DomObserversMixin = superClass => {
 
   return class DomObserversMixin extends superClass {    
@@ -33,29 +52,6 @@ export const DomObserversMixin = superClass => {
 
     static get properties() {
       return {
-
-        // The height of `recycled-list` is multiplied by
-        // this number when stamping reusable containers.  
-        //
-        // The new value is used to calculate how many 
-        // reusable items will be created, based off how many
-        // containers will fit inside an virtual container of this size.
-        //
-        // A larger number will result in more offscreen containers,
-        // so there is a tradeoff between scrolling performance and
-        // memory/computational load.
-        //
-        // When tuning rendering performance, this number should scale 
-        // in proportion to the height of individual repeated containers.
-        //
-        // Increase this number for taller containers that take up a 
-        // large portion of the viewport.
-        //
-        // The lower bounds of this number is clamped at 1.5.
-        hMargin: {
-          type: Number,
-          value: 2
-        },
 
         // The collection used to 'hydrate' each repeated element.
         //
@@ -72,7 +68,7 @@ export const DomObserversMixin = superClass => {
           reflectToAttribute: true
         },
 
-        // The width of `recycled-list` is multiplied by
+        // The size of `lite-list` is multiplied by
         // this number when stamping reusable containers. 
         //
         // The new value is used to calculate how many 
@@ -84,13 +80,13 @@ export const DomObserversMixin = superClass => {
         // memory/computational load.
         //
         // When tuning rendering performance, this number should scale 
-        // in proportion to the width of individual repeated containers.
+        // in proportion to the size of individual repeated containers.
         //
-        // Increase this number for wider containers that take up a 
+        // Increase this number for containers that take up a 
         // large portion of the viewport.
         //
         // The lower bounds of this number is clamped at 1.5.
-        wMargin: {
+        margin: {
           type: Number,
           value: 4
         },
@@ -116,6 +112,12 @@ export const DomObserversMixin = superClass => {
           computed: '__computeContainersPer(layout, _hostBbox, _sampleBbox)'
         },
 
+        _dimension: {
+          type: String,
+          value: 'height', // or 'width'
+          computed: '__computeDimension(layout)'
+        },
+
         // The total set of IntersectionObserverEntry objects for every DOM element container.
         // This list is updated when each time an entry changes its intersectional state.
         _entries: Array,
@@ -128,34 +130,40 @@ export const DomObserversMixin = superClass => {
 
         _hostBbox: Object,
 
+        _hostSize: {
+          type: Number,
+          computed: '__computeSize(_dimension, _hostBbox)'
+        },
+
         // IntersectionObserver instance.
         _intersectionObserver: Object,
 
         _marginBottom: {
           type: String,
-          computed: '__computeMarginBottom(hMargin, _hostBbox, _sampleBbox)'
+          computed: '__computeMarginBottom(margin, _hostBbox, _sampleBbox)'
         },
 
         _marginLeft: {
           type: String,
-          computed: '__computeMarginLeft(wMargin, _hostBbox, _sampleBbox)'
+          computed: '__computeMarginLeft(margin, _hostBbox, _sampleBbox)'
         },
 
         _marginRight: {
           type: String,
-          computed: '__computeMarginRight(wMargin, _hostBbox, _sampleBbox)'
+          computed: '__computeMarginRight(margin, _hostBbox, _sampleBbox)'
         },
 
         _marginTop: {
           type: String,
-          computed: '__computeMarginTop(hMargin, _hostBbox, _sampleBbox)'
+          computed: '__computeMarginTop(margin, _hostBbox, _sampleBbox)'
         }, 
 
         // Determines the maximum number of recyclable containers to stamp out,
         // given the particular layout, host size plus margin and item size.
         _maxContainerCount: {
           type: Number,
-          computed: '__computeMaxContainerCount(layout, hMargin, wMargin, _hostBbox, _sampleBbox, _containersPer)'
+          value: 1,
+          computed: '__computeMaxContainerCount(margin, _hostSize, _sampleSize, _containersPer)'
         },     
 
         _resizeObserver: Object,
@@ -175,9 +183,20 @@ export const DomObserversMixin = superClass => {
           computed: '__computeSampleBbox(_containers, _hostBbox)'
         },
 
+        _sampleSize: {
+          type: Number,
+          computed: '__computeSize(_dimension, _sampleBbox)'
+        },
+
+        _side: {
+          type: String,
+          value: 'top', // or 'left'
+          computed: '__computeSide(layout)'
+        },
+
         _threshold: {
           type: Number,
-          computed: '__computeThreshold(layout, _hostBbox, _sampleBbox)'
+          computed: '__computeThreshold(_hostSize, _sampleSize)'
         }
 
       };
@@ -220,15 +239,15 @@ export const DomObserversMixin = superClass => {
 
       if (!layout || !hostBbox || !sampleBbox) { return 1; }
 
-      if (layout === 'vertical') {
-        return Math.max(Math.floor(hostBbox.width / sampleBbox.width), 1);
-      }
+      const dim = layout === 'vertical' ? 'width' : 'height';
+      
+      return Math.max(Math.floor(hostBbox[dim] / sampleBbox[dim]), 1);
+    }
 
-      if (layout === 'horizontal') {        
-        return Math.max(Math.floor(hostBbox.height / sampleBbox.height), 1);
-      }
 
-      return 1;
+    __computeDimension(layout) {
+
+      return layout === 'vertical' ? 'height' : 'width';
     }
 
 
@@ -247,109 +266,63 @@ export const DomObserversMixin = superClass => {
     }
 
 
-    __computeMarginBottom(hMargin, hostBbox, sampleBbox) {
+    __computeMarginBottom(margin, hostBbox, sampleBbox) {
 
-      if (!hMargin || !hostBbox || !sampleBbox) { return; }
-
-      const diff = sampleBbox.height - hostBbox.height;
-
-      // Special care must be taken with IntersectionObserver
-      // when the child containers are larger than the host.
-      if (diff > 0) {
-
-        const offset = Math.max((sampleBbox.bottom - hostBbox.bottom), 0);
-        
-        return `${sampleBbox.height + offset}px`;
-      }
-
-      return `${hMargin * 25}%`;
+      return getMargin({
+        hostSide: hostBbox?.bottom, 
+        hostSize: hostBbox?.height, 
+        margin, 
+        sampleSide: sampleBbox?.bottom, 
+        sampleSize: sampleBbox?.height
+      });
     }
 
 
-    __computeMarginLeft(wMargin, hostBbox, sampleBbox) {
+    __computeMarginLeft(margin, hostBbox, sampleBbox) {
 
-      if (!wMargin || !hostBbox || !sampleBbox) { return; }
-
-      const diff = sampleBbox.width - hostBbox.width;
-
-      // Special care must be taken with IntersectionObserver
-      // when the child containers are larger than the host.
-      if (diff > 0) {
-
-        const offset = Math.max((sampleBbox.left - hostBbox.left), 0);
-
-        return `${sampleBbox.width + offset}px`;
-      }
-
-      return `${wMargin * 25}%`;
+      return getMargin({
+        hostSide: hostBbox?.left, 
+        hostSize: hostBbox?.width, 
+        margin, 
+        sampleSide: sampleBbox?.left, 
+        sampleSize: sampleBbox?.width
+      });
     }
 
 
-    __computeMarginRight(wMargin, hostBbox, sampleBbox) {
+    __computeMarginRight(margin, hostBbox, sampleBbox) {
 
-      if (!wMargin || !hostBbox || !sampleBbox) { return; }
-
-      const diff = sampleBbox.width - hostBbox.width;
-
-      // Special care must be taken with IntersectionObserver
-      // when the child containers are larger than the host.
-      if (diff > 0) {
-
-        const offset = Math.max((sampleBbox.right - hostBbox.right), 0);
-
-        return `${sampleBbox.width + offset}px`;
-      }
-
-      return `${wMargin * 25}%`;
+      return getMargin({
+        hostSide: hostBbox?.right, 
+        hostSize: hostBbox?.width, 
+        margin, 
+        sampleSide: sampleBbox?.right, 
+        sampleSize: sampleBbox?.width
+      });
     }
 
 
-    __computeMarginTop(hMargin, hostBbox, sampleBbox) {
+    __computeMarginTop(margin, hostBbox, sampleBbox) {
 
-      if (!hMargin || !hostBbox || !sampleBbox) { return; }
-
-      const diff = sampleBbox.height - hostBbox.height;
-
-      // Special care must be taken with IntersectionObserver
-      // when the child containers are larger than the host.
-      if (diff > 0) {
-
-        const offset = Math.max((sampleBbox.top - hostBbox.top), 0);
-        
-        return `${sampleBbox.height + offset}px`;
-      }
-
-      return `${hMargin * 25}%`;
+      return getMargin({
+        hostSide: hostBbox?.top, 
+        hostSize: hostBbox?.height, 
+        margin, 
+        sampleSide: sampleBbox?.top, 
+        sampleSize: sampleBbox?.height
+      });
     }
 
 
-    __computeMaxContainerCount(layout, hMargin, wMargin, hostBbox, sampleBbox, per) {
+    __computeMaxContainerCount(margin, hostSize, sampleSize, per) {
 
-      if (!layout || !hostBbox || !sampleBbox) { return 1; }
+      if (!hostSize || !sampleSize) { return 1; }
 
-      const {height, width} = sampleBbox;
+      const defaulted = margin || 4;
+      const clamped   = Math.max(defaulted, 1.5);
+      const sections  = Math.ceil((hostSize * clamped) / sampleSize);
 
-      if (!height || !width) { return 1; }
-
-      if (layout === 'vertical') {
-
-        const defaulted = hMargin || 2;
-        const margin    = Math.max(defaulted, 1.5);
-        const sections  = Math.ceil((hostBbox.height * margin) / height);
-
-        return sections * per;
-      }
-
-      if (layout === 'horizontal') {
-        
-        const defaulted = wMargin || 4;
-        const margin    = Math.max(defaulted, 1.5);
-        const sections  = Math.ceil((hostBbox.width * margin) / width);
-
-        return sections * per;
-      }
-
-      return 1;
+      return sections * per;
     }
 
 
@@ -366,31 +339,30 @@ export const DomObserversMixin = superClass => {
       return head(containers).getBoundingClientRect();
     }
 
+
+    __computeSide(layout) {
+
+      return layout === 'vertical' ? 'top' : 'left';
+    }
+
+
+    __computeSize(dimension, bbox) {
+
+      return bbox?.[dimension];
+    }
+
     // When containers are larger than the host,
     // the threshold must be a percentage representing
     // the ratio of the two sizes.
-    __computeThreshold(layout, hostBbox, sampleBbox) {
+    __computeThreshold(hostSize, sampleSize) {
 
-      if (!layout || !hostBbox || !sampleBbox) { return 0; }
+      if (!hostSize || !sampleSize) { return 0; }
+      if (hostSize > sampleSize)    { return 0; }
 
-      if (layout === 'vertical') {
+      const percentage = hostSize / sampleSize;
+      const threshold  = 1 - percentage;
 
-        if (hostBbox.height > sampleBbox.height) { return 0; }
-
-        const percentage = hostBbox.height / sampleBbox.height;
-        const threshold  = 1 - percentage;
-
-        return threshold;
-      }
-      else {
-
-        if (hostBbox.width > sampleBbox.width) { return 0; }
-
-        const percentage = hostBbox.width / sampleBbox.width;
-        const threshold  = 1 - percentage;
-
-        return threshold;
-      }
+      return threshold;
     }
 
 
@@ -437,7 +409,8 @@ export const DomObserversMixin = superClass => {
       const callback = entries => {
 
         if (entries.length === this._containerCount) {
-          this._entries = entries;        
+
+          this._entries = entries;
         }
         else {
 
@@ -446,7 +419,7 @@ export const DomObserversMixin = superClass => {
             const match = entries.find(update => 
                             update.target === entry.target);
 
-            return match ? match : entry;
+            return match || entry;
           });
         }
       };

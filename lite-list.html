@@ -1,0 +1,89 @@
+
+<style>
+
+  /* 
+    Using grid instead of flex here to enforce the 
+    constraint of needing identical sized children.
+
+    To keep high performance, this element only
+    measures a sample child once per resize.
+
+    This avoids a nondeterministic scenario that 
+    would require measuring every child dynamically, 
+    during scroll. 
+
+    Doing so would slam the DOM with resize calculations 
+    from calling child.getBoundingClientRect().
+  */
+
+  :host {
+    display:  grid;
+    position: relative;
+    height:   100%;
+
+    /* 
+      NOT part of the public API!
+
+      Allows programmatic scrolling beyond the 
+      height/width of the host container. 
+    */
+    --before-height: 0px;
+    --before-width:  0px;
+  }
+  
+  :host([layout="vertical"]) {
+    height:     100vh;
+    overflow-y: visible;
+  }
+
+  :host([layout="horizontal"]) {
+    grid-auto-flow:    column;
+    grid-auto-columns: max-content;
+    overflow-x:        scroll;
+  }
+
+  /* 
+    Allows scrolling beyond the height/width 
+    of the host container. 
+  */
+  :host::before {
+    content:  '';
+    position: absolute;
+    top:      0px;
+    left:     0px;
+    height:   var(--before-height);
+    width:    var(--before-width);
+  }
+
+  :host([layout="vertical"])::before {
+    width: 100%;
+  }
+
+  :host([layout="horizontal"])::before {
+    height: 100%;
+  }
+
+</style>
+
+
+<!-- 
+  This slot is specifically added for the browser's 
+  scroll-snap re-snapping workaround which is 
+  temporarily implemented in recycled-carousel. 
+-->
+<slot name="scroll-snap-workaround"></slot>
+
+  
+<template is="dom-repeat" 
+          items="[[_containerItems]]"
+          strip-whitespace
+          on-dom-change="__domChangeHandler">
+
+  <div class="container" 
+       index="[[index]]">
+    
+    <slot name$="slot-[[index]]"></slot>
+
+  </div>
+
+</template>
