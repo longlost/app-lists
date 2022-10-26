@@ -15,7 +15,7 @@ A collection of custom elements, each designed to work with a list of similar DO
   my-elements/my-list.html
 
 
-  ```
+  ```html
 
   <drag-drop-list sortable=".sortable-class">
     <template is="dom-repeat" items="[[items]]">
@@ -31,15 +31,18 @@ A collection of custom elements, each designed to work with a list of similar DO
  
   This element displays list items in a high performance scroller.
    
-  The list items are recycled so that the number of DOM elements remains low even for very large lists.
+  The list items are recycled so that the number of DOM elements remains low, even for very large lists. 
 
+  In fact, the maximum number of dom elements created by lite-list is dependent on the size dimensions of the host element relative to the size of the list elements. The number of stamped elements is determined by using the minimum value between the input array length and the computed maximum allowed number of elements.
+
+  So, as your list grows, say via pagination for example, the DOM memory footprint of lite-list is capped to an easily manageable level.
 
 ### Example Usage
 
 
   my-elements/pup-list.js
 
-  ```
+  ```javascript
 
   import '@longlost/app-lists/lite-list.js';
 
@@ -80,26 +83,37 @@ A collection of custom elements, each designed to work with a list of similar DO
         },
 
         // Drives implementation's <template is="dom-repeat">
-        _items: Array
+        _currentItems: Array
 
       };
     }
 
-
-    __itemsChangedHandler(event) {
-      this._items = event.detail.value;
+    // Required.
+    // 
+    // This event handler keeps slotted items in sync
+    // with lite-list's internal DOM elements.
+    __currentItemsChangedHandler(event) {
+      this._currentItems = event.detail.value;
     }
 
   ```
 
   my-elements/pup-list.html
 
-  ```
+  ```html
 
   <style>
 
+    /* 
+      It is required that each repeated element be the same size.
+    */
     .item {
-      height:           176px;
+      /* 
+        Notice 'height' is set here to guarantee uniformity for all items. 
+      */
+      height: 176px;
+
+      /* Nothing special here... */
       padding:          16px;
       border-bottom:    2px solid lightgray;
       background-color: white;
@@ -111,13 +125,13 @@ A collection of custom elements, each designed to work with a list of similar DO
 
   <lite-list infinite
              items="[[items]]"
-             on-lite-list-current-items-changed="__itemsChangedHandler">
+             on-lite-list-current-items-changed="__currentItemsChangedHandler">
 
     <template is="dom-repeat" 
-              items="[[_items]]">
+              items="[[_currentItems]]">
 
       <div class="item" 
-           slot$="slot-[[index]]">
+           slot$="slot-[[index]]"> <!-- This data-bound attribute is required. -->
         <h2>[[item.name]]</h2>
         <p>Recycled item [[index]]</p>
       </div>

@@ -28,7 +28,13 @@ import {head} from '@longlost/app-core/lambda.js';
 
 const getMargin = ({hostSide, hostSize, margin, sampleSide, sampleSize}) => {
 
-  if (!hostSide || !hostSize || !margin || !sampleSide || !sampleSize) { return; }
+  if (
+    typeof hostSide   !== 'number' ||
+    typeof sampleSide !== 'number' || 
+    !hostSize                      || 
+    !margin                        || 
+    !sampleSize
+  ) { return; }
 
   const diff = sampleSize - hostSize;
 
@@ -164,7 +170,7 @@ export const DomObserversMixin = superClass => {
           type: Number,
           value: 1,
           computed: '__computeMaxContainerCount(margin, _hostSize, _sampleSize, _containersPer)'
-        },     
+        },   
 
         _resizeObserver: Object,
 
@@ -226,7 +232,9 @@ export const DomObserversMixin = superClass => {
     }
 
 
-    __computeContainerCount(length = 1, max = 1) {
+    __computeContainerCount(length, max = 1) {
+
+      if (typeof length !== 'number') { return; }
 
       return Math.min(length, max);
     }
