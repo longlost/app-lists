@@ -4,7 +4,7 @@
   * 
   *   This element displays list items in a high performance scroller.
   *   
-  *   The list items are recycled so that the number of DOM elements remains low
+  *   The list items are recycled so that the number of DOM elements remains low,
   *   even for very large lists.
   *
   *
@@ -61,7 +61,7 @@
   *       };
   *     }
   *
-  *
+  *     // Required.
   *     __itemsChangedHandler(event) {
   *       this._items = event.detail.value;
   *     }
@@ -96,7 +96,7 @@
   *                 items="[[_items]]">
   *
   *         <div class="item" 
-  *              slot$="slot-[[index]]">
+  *              slot$="slot-[[index]]"> <!-- This attribute is required! -->
   *           <h2>[[item.name]]</h2>
   *           <p>Recycled item [[index]]</p>
   *         </div>
@@ -201,7 +201,10 @@ import {AppElement} from '@longlost/app-core/app-element.js';
 
 import {DomObserversMixin} from './dom-observers-mixin.js';
 
-import {head, tail} from '@longlost/app-core/lambda.js';
+import {
+  head, 
+  tail
+} from '@longlost/app-core/lambda.js';
 
 import {
   consumeEvent,
@@ -211,6 +214,9 @@ import {
 import template from './lite-list.html';
 
 
+
+// Hidden items that are above the scroller can be moved down.
+// Hidden items that are still below the fold need to stay where they are.
 const filterAvailable = ({direction, hidden, layout, visible}) => {
 
   const reference      = direction === 'forward'  ? head(visible) : tail(visible);
@@ -218,8 +224,6 @@ const filterAvailable = ({direction, hidden, layout, visible}) => {
   const entryDim       = layout    === 'vertical' ? 'bottom'      : 'right';
   const refMeasurement = reference.boundingClientRect[refDim];
 
-  // Hidden items that are above the scroller can be moved down.
-  // Hidden items that are still below the fold need to stay where they are.
   if (direction === 'forward') {
 
     return hidden.filter(entry => entry.boundingClientRect[entryDim] <= refMeasurement);
@@ -268,7 +272,7 @@ class LiteList extends DomObserversMixin(AppElement) {
         computed: '__computeData(infinite, items, _containerCount, _start)'
       },
 
-      // The current scroll direction, 'up', 'down', 'left' or 'right'.
+      // The current scroll direction. 'forward' or 'reverse'.
       _direction: {
         type: String,
         observer: '__directionChanged'
@@ -342,9 +346,12 @@ class LiteList extends DomObserversMixin(AppElement) {
     return [
       '__currentItemsChanged(_currentItems)',
       '__layoutChanged(layout)',
+      '__maxCountChanged(_maxContainerCount)',
       '__moveAvailableContainers(_sorted)',
       '__sampleBboxChanged(_sampleBbox)',
-      '__updateCurrentItems(_data)',
+
+      // '_containers' only used as a synchronization trigger.
+      '__updateCurrentItems(_data, _containers)',
       '__updatePagination(_virtualIndex, _containerCount)',
       '__updateVirtualStart(_sorted)'
     ];
@@ -378,6 +385,8 @@ class LiteList extends DomObserversMixin(AppElement) {
 
 
   __computeContainerItems(count) {
+
+    if (typeof count !== 'number') { return; }
 
     return Array(count).fill(undefined);
   }
@@ -501,7 +510,7 @@ class LiteList extends DomObserversMixin(AppElement) {
   // When changing scroll direction, the first change to this._data
   // happens before the container elements are resorted properly,
   // so set a lock that will ensure this erroneous state is ignored.
-  __directionChanged(_, oldVal) {
+  __directionChanged(newVal, oldVal) {
 
     if (oldVal) {
       this._skipCurrentItemsUpdate = true;
@@ -521,6 +530,15 @@ class LiteList extends DomObserversMixin(AppElement) {
       window.removeEventListener('scroll', this.__windowScrollHandler);
       this.addEventListener(     'scroll', this.__hostScrollHandler);
     }
+  }
+
+  // NOTE:
+  //
+  //    Use caution when consuming this event, as it fires
+  //    repeatedly any time the host is resized.
+  __maxCountChanged(max) {
+
+    this.fire('lite-list-max-containers-changed', {value: max});
   }
 
 
@@ -583,7 +601,8 @@ class LiteList extends DomObserversMixin(AppElement) {
 
       const {boundingClientRect, target} = entry;
 
-      // Calculate the future position.    
+      // Calculate the future position. 
+      //   
       // 'top' is relative to the viewport, so it can be a negative value.
       const placement = boundingClientRect[this._side] + this._travel + this._scroll;
 
@@ -651,12 +670,8 @@ class LiteList extends DomObserversMixin(AppElement) {
       return;
     }
 
-    if (
-      this._stopRecycling && 
-      (this._direction === 'down' || this._direction === 'right')
-    ) { 
-      return; 
-    }
+    // Check if done recycling containers.
+    if (this._stopRecycling && this._direction === 'forward') { return; }
 
     // This rare state happens when IntersectionObserver hasn't 
     // updated the state of all containers yet, 
@@ -683,10 +698,10 @@ class LiteList extends DomObserversMixin(AppElement) {
     // visible elements, that must be ignored.
     if (grouped.visible.length === 0) { return; }
 
-    if (this._direction === 'down' || this._direction === 'right') {
+    if (this._direction === 'forward') {
       this.__forward(grouped);
     }
-    else { // _direction === 'up' or 'left'.
+    else {
       this.__reverse(grouped);
     }
   }
@@ -718,12 +733,7 @@ class LiteList extends DomObserversMixin(AppElement) {
       });
     }
 
-    if (this.layout === 'vertical') {
-      this._direction = newVal > oldVal ? 'down' : 'up';
-    }
-    else if (this.layout === 'horizontal') {
-      this._direction = newVal > oldVal ? 'right' : 'left';
-    }
+    this._direction = newVal > oldVal ? 'forward' : 'reverse';
   }
 
   // Cannot use a computed here because '_sorted' 
@@ -751,6 +761,8 @@ class LiteList extends DomObserversMixin(AppElement) {
       return;
     }
 
+    if (data.length !== this._sorted.length) { return; }
+
     // Arrange data according to container order.
     this._currentItems = this._sorted.reduce((accum, entry, index) => {
 
@@ -763,11 +775,17 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   __updatePagination(index, count) {
 
+    if (typeof index !== 'number' || typeof count !== 'number') { return; }
+
     this.fire('lite-list-pagination-changed', {
       value: {
         count,
-        end:   index + count, 
-        start: index
+        direction:  this._direction,
+        end:        index + count,
+        itemBbox:   this._sampleBbox,
+        parentBbox: this._hostBbox,
+        per:        this._containersPer, // How many items per row/column.
+        start:      index
       }
     });
   }
