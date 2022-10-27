@@ -1,6 +1,6 @@
 {
   "name": "@longlost/app-lists",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "A collection of custom elements, each designed to work with a list of DOM elements.",
   "main": "index.js",
   "scripts": {
@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/longlost/app-lists#readme",
   "dependencies": {
-    "@longlost/app-core": "^9.0.4",
+    "@longlost/app-core": "^9.0.5",
     "@polymer/polymer": "^3.5.1"
   }
 }

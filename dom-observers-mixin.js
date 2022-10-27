@@ -134,7 +134,9 @@ export const DomObserversMixin = superClass => {
           computed: '__computeHidden(_entries, _threshold)'
         },
 
-        _hostBbox: Object,
+        _hostBbox: Object,  
+
+        _hostObserver: Object,
 
         _hostSize: {
           type: Number,
@@ -170,9 +172,7 @@ export const DomObserversMixin = superClass => {
           type: Number,
           value: 1,
           computed: '__computeMaxContainerCount(margin, _hostSize, _sampleSize, _containersPer)'
-        },   
-
-        _resizeObserver: Object,
+        }, 
 
         _root: {
           type: Object,
@@ -182,12 +182,9 @@ export const DomObserversMixin = superClass => {
         // The initial stamped item.
         // Used to determine the number reusable containers to 
         // stamp which will fill the host.
-        //
-        // '_hostBbox' used as timing trigger only.
-        _sampleBbox: {
-          type: Object,
-          computed: '__computeSampleBbox(_containers, _hostBbox)'
-        },
+        _sampleBbox: Object,
+
+        _sampleObserver: Object,
 
         _sampleSize: {
           type: Number,
@@ -340,14 +337,6 @@ export const DomObserversMixin = superClass => {
     }
 
 
-    __computeSampleBbox(containers) {
-
-      if (!containers || !containers.length) { return; }
-
-      return head(containers).getBoundingClientRect();
-    }
-
-
     __computeSide(layout) {
 
       return layout === 'vertical' ? 'top' : 'left';
@@ -384,7 +373,12 @@ export const DomObserversMixin = superClass => {
 
     __containersItemCountChanged(containers, count) {
 
-      if (!containers || containers.length < 2 || !count) { return; }
+      if (!containers?.length || !count) { return; }
+
+      this.__observeSample(containers.at(0));
+
+      // No need to observe such few continers.
+      if (containers.length < 3) { return; }
 
       if (containers.length === count) {
         this.__observeContainers(containers);
@@ -394,16 +388,27 @@ export const DomObserversMixin = superClass => {
 
     __observeHost() {
 
-      if (this._resizeObserver) { 
-        this.__cleanUpResizeObserver();
-        return;
-      }
+      if (this._hostObserver) { return; } // Already observing.
 
-      this._resizeObserver = new window.ResizeObserver(entries => {
+      this._hostObserver = new window.ResizeObserver(entries => {
+
         this._hostBbox = head(entries).target.getBoundingClientRect();
       });
 
-      this._resizeObserver.observe(this);
+      this._hostObserver.observe(this);
+    }
+
+
+    __observeSample(sample) {
+
+      this.__cleanUpSampleObserver();
+
+      this._sampleObserver = new window.ResizeObserver(entries => {
+
+        this._sampleBbox = head(entries).target.getBoundingClientRect();
+      });
+
+      this._sampleObserver.observe(sample);
     }
 
 
@@ -461,11 +466,20 @@ export const DomObserversMixin = superClass => {
     }
 
 
-    __cleanUpResizeObserver() {
+    __cleanUpHostObserver() {
 
-      if (this._resizeObserver) {
-        this._resizeObserver.disconnect();
-        this._resizeObserver = undefined;
+      if (this._hostObserver) {
+        this._hostObserver.disconnect();
+        this._hostObserver = undefined;
+      }
+    }
+
+
+    __cleanUpSampleObserver() {
+
+      if (this._sampleObserver) {
+        this._sampleObserver.disconnect();
+        this._sampleObserver = undefined;
       }
     }
 
@@ -473,7 +487,8 @@ export const DomObserversMixin = superClass => {
     __cleanUpObservers() {
 
       this.__cleanUpContainersObserver(this._containers);
-      this.__cleanUpResizeObserver();
+      this.__cleanUpHostObserver();
+      this.__cleanUpSampleObserver();
     }   
 
   };
