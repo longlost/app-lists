@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/longlost/app-lists#readme",
   "dependencies": {
-    "@longlost/app-core": "^9.0.4",
+    "@longlost/app-core": "^9.0.5",
     "@polymer/polymer": "^3.5.1"
   }
 }
