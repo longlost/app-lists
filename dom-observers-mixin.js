@@ -114,7 +114,6 @@ export const DomObserversMixin = superClass => {
         // Containers per row for 'vertical' layouts, or per column for 'horizontal'.
         _containersPer: {
           type: Number,
-          value: 1,
           computed: '__computeContainersPer(layout, _hostBbox, _sampleBbox)'
         },
 
@@ -392,7 +391,12 @@ export const DomObserversMixin = superClass => {
 
       this._hostObserver = new window.ResizeObserver(entries => {
 
-        this._hostBbox = head(entries).target.getBoundingClientRect();
+        const bbox = head(entries).target.getBoundingClientRect();
+
+        // Ignore updates for unstamped elements.
+        if (!bbox.height || !bbox.width) { return; } 
+
+        this._hostBbox = bbox;
       });
 
       this._hostObserver.observe(this);
@@ -405,7 +409,12 @@ export const DomObserversMixin = superClass => {
 
       this._sampleObserver = new window.ResizeObserver(entries => {
 
-        this._sampleBbox = head(entries).target.getBoundingClientRect();
+        const bbox = head(entries).target.getBoundingClientRect();
+
+        // Ignore updates for unstamped elements.
+        if (!bbox.height || !bbox.width) { return; }
+
+        this._sampleBbox = bbox;
       });
 
       this._sampleObserver.observe(sample);
