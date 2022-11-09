@@ -172,17 +172,16 @@
   *
   *
   * 
-  *   'lite-list-pagination-changed', {value: {count, end, start}} 
+  *   'lite-list-pagination-changed', {value: {count, direction, index, itemBbox, parentBbox, per}} 
   *
-  *     Detail value is an object that contains 'count' 
-  *     (number of recycled containers), 'start' and 'end' indexes.
-  *     'start' represents the current topmost/leftmost visible item.
-  *     'count' and 'end' are only hints to the developer and 
-  *     are not strict boundaries or limits.
-  *
+  *     Detail value is an object that contains information 
+  *     about the list state that is useful for paginating results.
+  *     'index' represents the current topmost/leftmost visible item.
+  *     'count' is only a hint to the developer.
   *
   *
-  *   'lite-list-sample-bbox-changed', {value: DOMRect} 
+  *
+  *   'lite-list-item-bbox-changed', {value: DOMRect} 
   *
   *     Detail value is a DOMRect object from the initial instance of a slotted child. 
   *     This info is used internally to determine how many recycleable elements to stamp out.
@@ -208,11 +207,10 @@ import {
 
 import {
   consumeEvent,
-  schedule,
+  schedule
 } from '@longlost/app-core/utils.js';
 
 import template from './lite-list.html';
-
 
 
 // Hidden items that are above the scroller can be moved down.
@@ -237,9 +235,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   static get is() { return 'lite-list'; }
 
-  static get template() {
-    return template;
-  }
+  static get template() { return template; }
 
 
   static get properties() {
@@ -275,6 +271,7 @@ class LiteList extends DomObserversMixin(AppElement) {
       // The current scroll direction. 'forward' or 'reverse'.
       _direction: {
         type: String,
+        value: 'forward', // Or 'reverse'.
         observer: '__directionChanged'
       },
 
@@ -313,7 +310,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
       _stopRecycling: {
         type: Boolean,
-        computed: '__computeStopRecycling(infinite, items, _containerCount, _virtualStart)'
+        computed: '__computeStopRecycling(infinite, items.length, _containerCount, _virtualStart)'
       },
 
       _translate: {
@@ -460,11 +457,11 @@ class LiteList extends DomObserversMixin(AppElement) {
   }
 
 
-  __computeStopRecycling(infinite, items, count, virtualStart) {
+  __computeStopRecycling(infinite, length, count, virtualStart) {
 
-    if (infinite || !items || !count) { return false; }
+    if (infinite || !length || !count) { return false; }
 
-    const last = items.length - 1;
+    const last = length - 1;
 
     return virtualStart + count > last;
   }
@@ -486,7 +483,12 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   __computeVirtualIndex(layout, sampleBbox, per, scroll) {
 
-    if (!layout || !sampleBbox || typeof scroll !== 'number') { return 0; }
+    if (
+      !layout     || 
+      !sampleBbox || 
+      !per        || 
+      typeof scroll !== 'number'
+    ) { return 0; }
 
     const {height, left, top, width} = sampleBbox;
 
@@ -556,8 +558,8 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     if (typeof this._containerIndex !== 'number' || !this._virtualIndex) { return; }
 
-    const section   = (this._virtualIndex - this._containerIndex) / this._containersPer;
-    const position  = this._sampleSize * section;
+    const section  = (this._virtualIndex - this._containerIndex) / this._containersPer;
+    const position = this._sampleSize * section;
 
     this._sorted.forEach(entry => {
 
@@ -709,7 +711,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   __sampleBboxChanged(bbox) {
 
-    this.fire('lite-list-sample-bbox-changed', {value: bbox});
+    this.fire('lite-list-item-bbox-changed', {value: bbox});
   }
 
 
@@ -771,21 +773,25 @@ class LiteList extends DomObserversMixin(AppElement) {
       return accum;
     }, []);
   }
-
+  
 
   __updatePagination(index, count) {
 
-    if (typeof index !== 'number' || typeof count !== 'number') { return; }
+    if (
+      typeof index !== 'number' || 
+      count < 3                 ||
+      !this._hostBbox           ||
+      !this._sampleBbox
+    ) { return; }
 
     this.fire('lite-list-pagination-changed', {
       value: {
         count,
         direction:  this._direction,
-        end:        index + count,
+        index,
         itemBbox:   this._sampleBbox,
         parentBbox: this._hostBbox,
-        per:        this._containersPer, // How many items per row/column.
-        start:      index
+        per:        this._containersPer // How many items per row/column.
       }
     });
   }
