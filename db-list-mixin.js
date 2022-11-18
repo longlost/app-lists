@@ -90,6 +90,11 @@ export const DbListMixin = superClass => {
           value: () => ([])
         },
 
+        layout: {
+          type: String,
+          value: 'vertical' // Or 'horizontal'.
+        },
+
         // Optimize db subscription usage.
         // Only run db item subscriptions when the list is visible.
         visible: Boolean,
@@ -171,7 +176,7 @@ export const DbListMixin = superClass => {
 
         _visibleCount: {
           type: Number,
-          computed: '__computeVisibleCount(_pagination)'
+          computed: '__computeVisibleCount(layout, _pagination)'
         },
 
         // Single use latch to handle 'lite-list' initilization.
@@ -276,15 +281,16 @@ export const DbListMixin = superClass => {
     }
 
 
-    __computeVisibleCount(pagination) {
+    __computeVisibleCount(layout, pagination) {
 
       if (!pagination) { return 1; }
 
       const {itemBbox, parentBbox, per} = pagination;
 
-      const visibleRows = Math.ceil(parentBbox.height / itemBbox.height);
+      const dim      = layout === 'vertical' ? 'height' : 'width';
+      const sections = Math.ceil(parentBbox[dim] / itemBbox[dim]);
 
-      return visibleRows * per;
+      return sections * per;
     }
 
 

@@ -843,10 +843,22 @@ class LiteList extends DomObserversMixin(AppElement) {
     this._containers = this.selectAll('.container');
   }
 
+  // Shift the base scroll calculation to correctly place
+  // the item horizontally, according to the desired position.
+  __getScroll(position, start) {
+
+    if (position === 'start') { return start; }
+
+    const magnitude = position === 'center' ? 0.5 : 1;
+
+    // Shift by minus host size, plus the item size.
+    return start - (this._hostSize * magnitude) + (this._sampleSize * magnitude);
+  }
+
   // In order to scroll to far offscreen positions, 
   // that currently have no content, first grow the size of 
   // the scroller before scrolling to the correct position.
-  __scrollToIndex(index, behavior) {
+  __scrollToIndex(index, position, behavior) {
 
     // Returns the column/row aware section index from an absolute index.
     // Num --> Num
@@ -867,7 +879,8 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     // Host's ::before psuedo element.
     const beginning = this.layout === 'vertical' ? this._hostBbox.top : 0;
-    const scroll    = beginning + distance;
+    const start     = beginning + distance;
+    const scroll    = this.__getScroll(position, start);
 
     // Grow the ::before pseudo element in preparation for scrolling
     // beyond the original height of the host container.
@@ -893,16 +906,18 @@ class LiteList extends DomObserversMixin(AppElement) {
 
 
   // Smooth scrolling move to an item by its index.
-  animateToIndex(index) {
+  animateToIndex(index, position = 'start') {
 
-    this.__scrollToIndex(index, 'smooth');
+    this.__scrollToIndex(index, position, 'smooth');
+
+    return Promise.resolve(); // Unify api with 'moveToIndex'.
   }
 
 
   // Instant move to an item by its index.
-  async moveToIndex(index) { 
+  async moveToIndex(index, position = 'start') { 
 
-    this.__scrollToIndex(index, 'instant'); 
+    this.__scrollToIndex(index, position, 'instant'); 
 
     await schedule();
 
