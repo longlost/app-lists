@@ -4,8 +4,8 @@
   * 
   *   This mixin provides Firestore integration with `lite-list`.
   *   
-  *   It includes automatic pagination and garbage collection for
-  *   very large or indeterminate sized lists.
+  *   It includes automatic pagination and "garbage collection" for
+  *   very large lists or lists that may grow to an indeterminate size.
   * 
   * 
   * 
@@ -19,6 +19,15 @@
   * 
   *     constraints - Array - Firestore query constraint functions, 
   *                           such as 'where' and 'orderBy'.
+  *                           ie. [where('a', '==', 'b'), orderBy('x', 'asc')]
+  * 
+  * 
+  *     reverseConstraints - Array - Firestore query constraint functions, 
+  *                                  such as 'where' and 'orderBy',
+  *                                  ordered in the opposite direction.
+  *                                  Used for paginating when scrolling
+  *                                  in reverse.
+  *                                  ie. [where('a', '==', 'b'), orderBy('x', 'desc')]
   * 
   *     
   *     visible - Boolean - Db subscriptions are only active when true.
@@ -55,14 +64,10 @@
 
 import {clamp} from '@longlost/app-core/lambda.js';
 
-import {
-  hijackEvent, 
-  listenOnce
-} from '@longlost/app-core/utils.js';
+import {schedule} from '@longlost/app-core/utils.js';
 
 import {
   collection,
-  endAt,
   initDb,
   limit,
   onSnapshot,
@@ -71,6 +76,33 @@ import {
 } from '@longlost/app-core/services/services.js';
 
 import '@longlost/app-lists/lite-list.js';
+
+
+const getQueryConstraints = ({
+  batchSize, 
+  constraints, 
+  direction, 
+  doc, 
+  index,
+  reverseConstraints
+}) => {
+
+  const notAtStart = index > 0;
+  
+  // Do not mutate original input array.
+  const qConstraints = direction === 'reverse' && notAtStart ? 
+                         [...reverseConstraints] : 
+                         [...constraints]; 
+
+  if (notAtStart) {
+
+    qConstraints.push(startAt(doc));
+  }
+
+  qConstraints.push(limit(batchSize));
+
+  return qConstraints;
+};
 
 
 export const DbListMixin = superClass => {
@@ -95,9 +127,35 @@ export const DbListMixin = superClass => {
           value: 'vertical' // Or 'horizontal'.
         },
 
+        // Firestore query constraint functions, 
+        // such as 'where' and 'orderBy'.
+        //
+        // Used when scrolling in the 'reverse'
+        // direction. These should return 
+        // results in the reverse ordering from 
+        // 'constrains'.
+        //
+        // This is due to the fact that 'endAt'
+        // is not symmetrical to 'startAt'. 
+        //
+        // 'endAt' is not respected when used 
+        // with 'limit'. The returned results 
+        // start at the beginning of the 
+        // collection, according to 'orderBy'.
+        reverseConstraints: {
+          type: Array,
+          value: () => ([])
+        },
+
         // Optimize db subscription usage.
         // Only run db item subscriptions when the list is visible.
         visible: Boolean,
+
+        // Determines how many results to fetch from db for each page.
+        _batchSize: {
+          type: Number,
+          computed: '__computeBatchSize(_min, _max)'
+        },
 
         // Whether currently fetching from the db or not.
         // Used to limit only one sub at at time to the db.
@@ -135,13 +193,14 @@ export const DbListMixin = superClass => {
 
         // From 'lite-list'.
         //
-        // Maximum number of entries to fetch per pagination.
-        _max: Number,    
+        // Maximum number of containers to be stamped.
+        _max: Number, 
 
         // How many items to fetch for initialization.
         _min: {
           type: Number,
-          value: 8
+          value: 20,
+          readOnly: true
         },
 
         // From 'lite-list' 'pagination-changed' event.
@@ -160,10 +219,12 @@ export const DbListMixin = superClass => {
         // nested template repeater's .items property.
         _repeaterItems: Array,
 
+        // Used to filter pagination events to reduce unneeded
+        // hits to the database.
         _resolution: {
           type: Number,
           value: 1,
-          computed: '__computeResolution(_max, _visibleCount)'
+          computed: '__computeResolution(_batchSize)'
         },
 
         _resultsCount: {
@@ -177,10 +238,7 @@ export const DbListMixin = superClass => {
         _visibleCount: {
           type: Number,
           computed: '__computeVisibleCount(layout, _pagination)'
-        },
-
-        // Single use latch to handle 'lite-list' initilization.
-        _waitedForMax: Boolean
+        }
 
       };
     }
@@ -188,7 +246,7 @@ export const DbListMixin = superClass => {
 
     static get observers() {
       return [
-        '__updateItems(visible, constraints, _ref, _index)'
+        '__updateItems(visible, constraints, reverseConstraints, _ref, _batchSize, _index)'
       ];
     }
 
@@ -227,6 +285,12 @@ export const DbListMixin = superClass => {
     }
 
 
+    __computeBatchSize(min, max = 1) {
+
+      return Math.max(min, max);
+    }
+
+
     __computeData(polymerObj) {
 
       const items = polymerObj?.base;
@@ -235,9 +299,13 @@ export const DbListMixin = superClass => {
 
       return items.reduce((accum, item) => {
 
-        if (!item) { return accum; } // Items may be GC'd.
+        const uid = item?.data?.uid;
 
-        accum[item.data.uid] = item.data;
+        // Items may be GC'd, so check for 
+        // items with data from the db.
+        if (uid) { 
+          accum[item.data.uid] = item.data; 
+        }        
 
         return accum;
       }, {});
@@ -273,11 +341,11 @@ export const DbListMixin = superClass => {
     }
 
     // Represents the number of times the current db subscription
-    // is shifted as the user scrolls, relative to the maximum
-    // number of DOM elements.
-    __computeResolution(max = 1, visible = 1) {
+    // is shifted as the user scrolls, relative to the batch size.
+    __computeResolution(batchSize = 1) {
 
-      return Math.ceil((2 * max) / visible);
+      // Paginate near the middle of the batch.
+      return Math.ceil(batchSize / 2); 
     }
 
 
@@ -315,63 +383,59 @@ export const DbListMixin = superClass => {
     // far off screen, relative to the viewport.
     //
     // The max amount of data items left in the array is
-    // this._max * 3. That is, the current set of items
-    // that are being subscribed to (1 max total), and 
-    // one set of stale items before (1 max), and one 
-    // set after (1 max), the current visible/live set.
-    __garbageCollect(index, direction) {
+    // this._batchSize * 3. 
+    //
+    // That is, the current set of items that are being 
+    // subscribed to (1 batch size), and one set of 
+    // stale items before (1 size), and one set after 
+    // (1 size), the current visible/live set.
+    __garbageCollect(index, direction, batchSize) {
 
       if (
         typeof index !== 'number' ||
         !this._pagination         || 
-        this._max <= this._min
+        batchSize <= this._min
       ) { return; }
 
+      const distance     = batchSize * 2;
       const garbageIndex = direction === 'forward' ?
-                             index - this._max :
-                             index + this._max;
+                             index - distance :
+                             index + distance;
 
       const totalGarbage = direction === 'forward' ? 
                              garbageIndex : 
                              this._listItems.length - garbageIndex;
 
-      // Only GC between 0 and this._max items at a time.
-      const count = clamp(0, this._max, totalGarbage);
+      // Only GC between 0 and batchSize items at a time.
+      const count = clamp(0, batchSize, totalGarbage);
       const clear = Array(count).fill(undefined);
-
-      // Do not force and update with 'this.splice()', as these
-      // changes do NOT need to be reflected the DOM.
-      this._listItems.splice(garbageIndex, clear.length, ...clear);
-    }
-
-
-    __getQueryConstraints(constraints, index, direction) {
-      
-      if (index > 0) {
-
-        const {doc} = this._listItems.at(index);
-
-        if (direction === 'reverse') {
-          constraints.push(endAt(doc));
-        }
-        else {
-          constraints.push(startAt(doc));
-        }
-      }
-
-      constraints.push(limit(Math.max(this._min, this._max)));
-
-      return constraints;
-    }
-
-
-    // Start a subscription to file data changes.
-    __updateItems(visible, constraints, ref, index) {
+      const start = direction === 'forward' ? 
+                      garbageIndex - count : 
+                      garbageIndex;
 
       if (
-        !constraints?.length ||
-        !ref                 ||
-        (index > 0 && !this._listItems.at(index)) // Validate index is in range.
+        start < 0                              || // Before beginning of array.
+        start + count > this._listItems.length || // After end of array.
+        count === 0                               // No items to remove. Bail.
+      ) { return; }
+
+      // Do not force and update with 'this.splice()', as these
+      // changes do NOT need to be reflected the DOM immediately.
+      // Changes can be picked up the next time the repeater updates.
+      this._listItems.splice(start, count, ...clear);
+    }
+
+    // Start a subscription to file data changes.
+    __updateItems(visible, constraints, reverseConstraints, ref, batchSize, index) {
+
+      const doc = this._listItems?.at(index)?.doc;
+
+      if (
+        !constraints?.length        ||
+        !reverseConstraints?.length ||
+        !ref                        ||
+        !batchSize                  ||
+        (index > 0 && !doc) // Validate index is in range.
       ) { return; } 
       
       // Cancel previous subscription.
@@ -384,38 +448,44 @@ export const DbListMixin = superClass => {
 
       // Cache this value to guarantee it's accurate for 
       // this particular set of results.
-      const direction = this._pagination?.direction;
+      const direction = this._pagination?.direction || 'forward';
 
-      this.__garbageCollect(index, direction);
+      this.__garbageCollect(index, direction, batchSize);
 
 
-      const callback = results => {
+      const callback = raw => {
 
         // Check for any late returning results that are from prior subs.
-        if (this._busy && index !== this._index) { return; }
+        if (index !== this._index) { return; }
 
         // Filter out orphaned data that may have been caused
         // by deletions prior to cloud processing completion.
-        const validResults = results.filter(obj => obj.data.uid);
-        this._resultsCount = validResults.length; // Used to detect the end of db entries.
+        const validResults = raw.filter(obj => obj.data.uid);
+        const results      = direction === 'reverse' ? 
+                               validResults.reverse() :
+                               validResults;
+        const count        = results.length;
+        this._resultsCount = count; // Used to detect the end of db entries.
 
         // Add/replace current range of results into the main '_listItems' array.
         if (Array.isArray(this._listItems)) {
 
-          // Reverse pagination uses 'endAt' db function to fetch
-          // items that come before the current index.
+          const lastIndex = count - 1;
+
+          // Reverse pagination returns items that come before the current index.
           const start = direction === 'reverse' ?
-                          // One less than the total results since we use the inclusive
-                          // 'endAt' constraint function. So shift back enough for
-                          // the last result to replace the item at index.
-                          index - (validResults.length - 1) :
-                          index;
           
-          this.splice('_listItems', start, validResults.length, ...validResults);
+                          // One less than the total results since we use the inclusive
+                          // 'startAt' constraint function. So shift back enough for
+                          // the last result to replace the item at index.
+                          Math.max(0, index - lastIndex):
+                          index || 0;
+          
+          this.splice('_listItems', start, count, ...results);
         }
         else { // Initialization.
 
-          this.set('_listItems', validResults);
+          this.set('_listItems', results);
         }
 
         this._busy = false;
@@ -439,23 +509,29 @@ export const DbListMixin = superClass => {
         console.error(error);
       };
 
+      const qConstraints = getQueryConstraints({
+        batchSize, 
+        constraints, 
+        direction, 
+        doc, 
+        index,
+        reverseConstraints
+      });
 
-      const qConstraints = this.__getQueryConstraints([...constraints], index, direction);
-      const q            = queryColl(ref, ...qConstraints);
+      const q = queryColl(ref, ...qConstraints);
 
-      this._unsubscribe = onSnapshot(q, snapshot => {
+      this._unsubscribe = onSnapshot(q, async snapshot => {
 
         if (snapshot.exists || ('empty' in snapshot && snapshot.empty === false)) {
 
-          window.requestAnimationFrame(() => {
+          const results = [];
 
-            const results = [];
+          // Snapshots are not true arrays. So make one.
+          snapshot.forEach(d => results.push({data: d.data(), doc: d}));
 
-            // Snapshots are not true arrays. So make one.
-            snapshot.forEach(doc => results.push({data: doc.data(), doc}));
+          await schedule(); // Smooths jank.
 
-            callback(results);
-          });
+          callback(results);
         } 
         else {
           errorCallback({message: 'document does not exist'});
@@ -477,8 +553,6 @@ export const DbListMixin = superClass => {
     // the local repeater of slotted items.
     __currentItemsChangedHandler(event) {
 
-      hijackEvent(event);
-
       this._repeaterItems = event.detail.value;
     }
 
@@ -492,33 +566,43 @@ export const DbListMixin = superClass => {
     }
 
 
-    async __paginationChangedHandler(event) {
+    __paginationChangedHandler(event) {
 
-      hijackEvent(event);
-
-      const pagination     = event.detail.value;
-      const {count, index} = pagination;
+      const pagination              = event.detail.value;
+      const {direction, index, per} = pagination;
 
       // At the end of the camera roll. Done paginating.
-      if (this._endDetected && index >= this._pagination.index) { return; }
+      if (this._endDetected && index >= this._pagination.index) { 
+        return; 
+      }
+
+      // Don't paginate when returning to zero. The last
+      // pagination in 'reverse' already covers this 'window'.
+      if (
+        direction                  === 'reverse' && // Current.
+        this._pagination.direction === 'reverse' && // Previous.
+        index === 0
+      ) { return; }
 
       // Do not hit the db at each change.
       //
       // The resolution of this event is 1 fired for each row
       // of photos that passes the top of the viewport.
-      const remainder = index % this._resolution;
+      // So compare this with our desired resolution.
+      //
+      // This effectively defines when to move the 'window'
+      // of 'live' items.
+      const remainder         = index % this._resolution;
+      const pageIsThisSection = remainder >= per;
 
+      // Not initialization (index === 0).
+      // Not this section.
       // Skip this tick.
-      if (remainder !== 0) { return; }
-
-      // Must wait for the next update to 'max' before
-      // triggering a new db subscription.
-      if (count <= this._min && index === 0 && !this._waitedForMax) {
-
-        this._waitedForMax = true;
-        
-        await listenOnce(this, 'lite-list-max-containers-changed');
+      if (remainder !== 0 && pageIsThisSection && !this._allowMove) {
+        return; 
       }
+
+      this._allowMove = false;
 
       if (this._busy) {
 
@@ -528,7 +612,61 @@ export const DbListMixin = superClass => {
 
         this._pagination = pagination;
       }
-    }    
+    }
+
+
+    __findScrollerMoveTo() {
+
+      const carousel = this.select('lite-carousel');
+
+      if (carousel) {
+
+        return carousel.moveToSection.bind(carousel);
+      }
+
+      const list = this.select('lite-list');
+
+      return list.moveToIndex.bind(list);
+    }
+
+    // The main difficulty comes when making
+    // jumps to indexes that are far from the
+    // current position.
+    //
+    // This is a special case because Firebase 
+    // requires an existing document to reference 
+    // as a starting point in a paged query.
+    //
+    // If we are moving to a position where 
+    // previous documents are not available from 
+    // prior paginations, we need to provide the 
+    // reference doc.
+    //
+    // Prime '_listItems' in such a way as to 
+    // allow for large 'jumps'.
+    //
+    // First, fill in the missing ref doc, if needed.
+    //
+    // Then, move to the desired item index.
+    moveTo(index, tempIndex, tempItems) {
+
+      const withLag        = index + this._lag;
+      const requiresNewDom = Math.max(index, withLag) >= this._listItems.length;
+
+      if (requiresNewDom) {
+
+        this._allowMove = true;
+
+        const start = index - tempIndex;
+
+        // Prepare for 'doc' reference reads which are used for pagination.
+        this.splice('_listItems', start, tempItems.length, ...tempItems);
+      }
+
+      const moveTo = this.__findScrollerMoveTo();
+
+      return moveTo(index);
+    }   
 
   };
 };
