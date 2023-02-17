@@ -201,7 +201,9 @@ import {AppElement} from '@longlost/app-core/app-element.js';
 import {DomObserversMixin} from './dom-observers-mixin.js';
 
 import {
-  head, 
+  compose,
+  head,
+  split,
   tail
 } from '@longlost/app-core/lambda.js';
 
@@ -212,6 +214,27 @@ import {
 
 import template from './lite-list.html';
 
+
+// Return the leftmost position of a child 
+// element with respect to its parent.
+const getOffset = (hostSize, sampleSize, position = 'start') => {
+
+  switch (position) {
+
+    case 'start':
+      return 0;
+
+    case 'center':
+
+      const hostCenter   = hostSize   / 2;
+      const sampleCenter = sampleSize / 2;
+
+      return hostCenter - sampleCenter;
+
+    case 'end':
+      return hostSize - sampleSize;
+  } 
+};
 
 // Hidden items that are above the scroller can be moved down.
 // Hidden items that are still below the fold need to stay where they are.
@@ -245,6 +268,13 @@ class LiteList extends DomObserversMixin(AppElement) {
       // item in the list when 'infinite' is set.
       infinite: Boolean,
 
+      // An intermediate value that is used soley for the 
+      // purpose of leveraging the class value's 'observer'.
+      _allHidden: {
+        type: Array,
+        observer: '__allHiddenChanged'
+      },
+
       _containerIndex: {
         type: Number,
         computed: '__computeContainerIndex(_containerCount, _virtualIndex)'
@@ -268,21 +298,20 @@ class LiteList extends DomObserversMixin(AppElement) {
         computed: '__computeData(infinite, items, _containerCount, _start)'
       },
 
-      // The current scroll direction. 'forward' or 'reverse'.
+      // The current scroll direction.
       _direction: {
         type: String,
-        value: 'forward', // Or 'reverse'.
-        observer: '__directionChanged'
+        value: 'forward' // Or 'reverse'.
       },
+
+      // This value reflects only changes made due to 
+      // items coming into view vs. going out of view.
+      _incomingHidden: Array,
 
       _maxSize: {
         type: Number,
         computed: '__computeMaxSize(infinite, items.length, _containersPer, _sampleSize)'
       },
-
-      // This becomes true when the amount of containers changes.
-      // Necessary to correct for screen rotation/resizes.
-      _needsRepositioning: Boolean,
 
       // This current scrolled distance of the host element or window.
       _scroll: {
@@ -295,11 +324,9 @@ class LiteList extends DomObserversMixin(AppElement) {
         computed: '__computeSections(_containerCount, _containersPer)'
       },
 
-      _skipCurrentItemsUpdate: Boolean,
-
       _sorted: {
         type: Array,
-        computed: '__computeSorted(_containers, _hidden, _side)'
+        computed: '__computeSorted(_containers, _incomingHidden, _side)'
       },
 
       _start: {
@@ -342,10 +369,13 @@ class LiteList extends DomObserversMixin(AppElement) {
   static get observers() {
     return [
       '__currentItemsChanged(_currentItems)',
+      '__hostSizeChanged(_hostSize)',
       '__layoutChanged(layout)',
       '__maxCountChanged(_maxContainerCount)',
       '__moveAvailableContainers(_sorted)',
+      '__rootMarginChanged(_rootMargin)',
       '__sampleBboxChanged(_sampleBbox)',
+      '__updateAllHidden(_hidden)',
 
       // '_containers' only used as a synchronization trigger.
       '__updateCurrentItems(_data, _containers)',
@@ -427,7 +457,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   // Get live position measurements and create a 
   // collection that is similar to IntersectionObserverEntry 
-  // to standardize the api, then sort by position.
+  // to simplify the api, then sort by position.
   __computeSorted(containers, hidden, side) {
 
     if (!containers || !hidden || !side) { return; }
@@ -488,7 +518,9 @@ class LiteList extends DomObserversMixin(AppElement) {
       !sampleBbox || 
       !per        || 
       typeof scroll !== 'number'
-    ) { return 0; }
+    ) { 
+      return 0; 
+    }
 
     const {height, left, top, width} = sampleBbox;
 
@@ -501,6 +533,23 @@ class LiteList extends DomObserversMixin(AppElement) {
     return section * per;
   }
 
+  // This is used to filter incoming vs outgoing
+  // scroll possition changes.
+  //
+  // Any dropped frames are more egregious when
+  // the user begins her scroll away from an item
+  // versus when the item is coming to rest after
+  // a scroll operation.
+  //
+  // This is especially useful in use cases where
+  // scroll snapping is utilized, ie 'lite-carousel'.
+  __allHiddenChanged(newVal, oldVal) {
+
+    if (oldVal?.length > newVal?.length) { return; }
+
+    this._incomingHidden = newVal;
+  }
+
 
   __currentItemsChanged(items) {
 
@@ -509,13 +558,12 @@ class LiteList extends DomObserversMixin(AppElement) {
     this.fire('lite-list-current-items-changed', {value: items});
   }
 
-  // When changing scroll direction, the first change to this._data
-  // happens before the container elements are resorted properly,
-  // so set a lock that will ensure this erroneous state is ignored.
-  __directionChanged(newVal, oldVal) {
+  // Screen resizes or orientation changes.
+  __hostSizeChanged(size) {
 
-    if (oldVal) {
-      this._skipCurrentItemsUpdate = true;
+    if (size && this._containers?.length) {
+
+      this.__reposition();
     }
   }
 
@@ -543,6 +591,11 @@ class LiteList extends DomObserversMixin(AppElement) {
     this.fire('lite-list-max-containers-changed', {value: max});
   }
 
+  __rootMarginChanged(rootMargin) {
+
+    this.fire('lite-list-root-margin-changed', {value: rootMargin});
+  }
+
 
   __move(container, position) {
 
@@ -550,34 +603,92 @@ class LiteList extends DomObserversMixin(AppElement) {
     container.style['transform'] = `${this._translate}(${position}px)`;
   }
 
+
+  __getMarginNum() {
+
+    const getNum = compose(split('%'), head, split('px'), head);
+
+    const str = this.layout === 'vertical' ? this._marginTop : this._marginLeft;
+    const num = Number(getNum(str));
+
+    const isPercent = str.includes('%');
+
+    if (isPercent) {
+
+      return Math.round(this._hostSize * (num / 100));
+    }
+
+    return num;
+  }
+
   // Correct the position of containers when some have been removed or added.
   // This commonly occurs after screen rotation or resize changes.
   //
   // Also used to correct for programmic scrolling by 'moveToIndex' public method.
-  __reposition() {
+  async __reposition() {
+
+    await schedule();
 
     if (typeof this._containerIndex !== 'number' || !this._virtualIndex) { return; }
 
-    const section  = (this._virtualIndex - this._containerIndex) / this._containersPer;
-    const position = this._sampleSize * section;
+    // Placement of the containers should be 
+    // deterministic from the dev's point of view.
+    //
+    // To that end, we must calculate the position 
+    // of each container with the same parameters
+    // as IntersectionObserver, namely 'rootMargin'.
+    const offset        = getOffset(this._hostSize, this._sampleSize, this.position);
+    const sectionIndex  = this._virtualIndex / this._containersPer;
+    const distance      = Math.max(0, sectionIndex - 1) * this._sampleSize;
+    const indexPosition = distance + offset;
+
+    // One whole jump from a starting position to the next placement.
+    const jump             = (this._containerCount / this._containersPer) * this._sampleSize;
+    const currentShift     = Math.floor(sectionIndex / this._containerCount);
+    const currentShiftSize = currentShift     * jump;
+    const shiftForward     = currentShiftSize + jump;
+    const shiftBack        = currentShiftSize - jump;
+    const margin           = this.__getMarginNum();
+
+    const startPosition = this._direction === 'forward' ?
+                            indexPosition - margin :
+                            shiftForward  + margin;
+
+    const getPosition = placement => {
+
+      // Check if the container would be available to be shifted forward.
+      // In this case, if it is placed before the viewport edge + rootMargin.
+      if (!this.infinite && placement < startPosition && shiftForward < this._maxSize) {
+
+        return shiftForward;
+      }
+
+      if (!this.infinite && placement >= this._maxSize && shiftBack >= 0) {
+
+        return shiftBack;
+      }
+
+      if (indexPosition >= jump) {
+
+        return currentShiftSize;
+      }
+    };
 
     this._sorted.forEach(entry => {
 
       const {boundingClientRect, target} = entry;
 
       const previous = target.previous || 0;
-      const travel   = position - previous;
+      const travel   = currentShiftSize - previous;
 
       // Calculate the future position. 
       const placement = boundingClientRect[this._side] + travel + this._scroll;
+      const position  = getPosition(placement);
 
-      // Always move in 'infinite' mode.
-      //
-      // Do not exceed the maximum distance
-      // when out of 'infinite' mode.
-      if (!this.infinite && placement >= this._maxSize) { return; }
+      if (position) {
 
-      this.__move(target, position);
+        this.__move(target, position);
+      }
     });
 
     // Force a new set of calculations that place 
@@ -599,23 +710,40 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     if (!available.length) { return; }
 
-    available.forEach(entry => {
+    const getNewPlacement = side => side + this._scroll + this._travel;
+
+    const {length} = this.items;
+
+    const movables = this.infinite ? available : available.filter(entry => {
+
+      const {boundingClientRect, target} = entry;
+      const {height, left, top, width}   = boundingClientRect;
+
+      // 'top'/'left' are relative to the viewport, so can be a negative values.
+      const scrollSide = this.layout === 'vertical' ? top    : left;
+      const scrollDim  = this.layout === 'vertical' ? height : width;
+      const perSide    = this.layout === 'vertical' ? left   : top;
+      const perDim     = this.layout === 'vertical' ? width  : height;
+
+      // Calculate the future position. 
+      const placement   = getNewPlacement(scrollSide);
+      const scrollIndex = Math.floor(placement / scrollDim) * this._containersPer;
+      const perIndex    = Math.floor(perSide   / perDim);
+      const index       = scrollIndex + perIndex;
+
+      return index < length;
+    });
+
+    movables.forEach(entry => {
 
       const {boundingClientRect, target} = entry;
 
       // Calculate the future position. 
       //   
-      // 'top' is relative to the viewport, so it can be a negative value.
-      const placement = boundingClientRect[this._side] + this._travel + this._scroll;
-
-      // Always move in 'infinite' mode.
-      //
-      // Do not exceed the maximum distance
-      // when out of 'infinite' mode.
-      if (!this.infinite && placement >= this._maxSize) { return; }
-
-      const previous = target.previous || 0;
-      const position = previous + this._travel;
+      // 'top'/'left' are relative to the viewport, so can be a negative values.
+      const placement = getNewPlacement(boundingClientRect[this._side]);
+      const previous  = target.previous || 0;
+      const position  = previous + this._travel;
 
       this.__move(target, position);
     });
@@ -658,18 +786,6 @@ class LiteList extends DomObserversMixin(AppElement) {
       !this._hidden.length
     ) { 
       return; 
-    }
-
-    // This corrects for screen orientation/resize changes.
-    if (this._needsRepositioning) {
-
-      this._needsRepositioning = false;
-
-      await schedule();
-
-      this.__reposition();
-
-      return;
     }
 
     // Check if done recycling containers.
@@ -722,9 +838,9 @@ class LiteList extends DomObserversMixin(AppElement) {
     // lagging behind the speed of scrolling up. 
     // 
     // This is especially problematic when the list has been scrolled
-    // down quite a bit, resulting in a high rate of scroll velocity.
+    // down quite a bit, resulting in a high scroll velocity.
     //
-    // Programmic scrolling includes built in scroll to top functionality 
+    // Programmic scrolling includes built-in scroll to top functionality 
     // on Apple touch devices (when top of ui chrome is tapped), as
     // well as calls to window.scrollTo(0).
     if (newVal === 0 && oldVal > 0 && this._containers) {
@@ -738,42 +854,50 @@ class LiteList extends DomObserversMixin(AppElement) {
     this._direction = newVal > oldVal ? 'forward' : 'reverse';
   }
 
+  // '_allHidden' is an intermediate value that is
+  // used soley for the purpose of leveraging the
+  // class value's 'observer'.
+  __updateAllHidden(hidden) {
+
+    this._allHidden = hidden;
+  }
+
   // Cannot use a computed here because '_sorted' 
   // changing creates unnecessary computation cycles.
   //
   // Extra work is to be avoided, since '_currentItems' 
   // deals directly with stamping repeated DOM elements
   // while scrolling.
-  __updateCurrentItems(data) {
+  async __updateCurrentItems(data) {
 
-    if (!data) { return; }
+    try {
 
-    if (!this._sorted) { 
+      if (!data) { return; }
 
-      this._currentItems = data;
-      return;
+      if (!this._sorted) {
+
+        this._currentItems = data;
+
+        return;
+      }
+
+      if (data.length !== this._sorted.length) { return; }
+
+      // Arrange data according to container order.
+      this._currentItems = this._sorted.reduce((accum, entry, index) => {
+
+        accum[entry.target.index] = data[index];
+
+        return accum;
+      }, []);
+
     }
-
-    // When changing scroll direction, the first change to data
-    // happens before the container elements are resorted properly,
-    // so ignore this erroneous state.
-    if (this._skipCurrentItemsUpdate) {
-
-      this._skipCurrentItemsUpdate = false;
-      return;
+    catch (error) {
+      if (error === 'throttled' || error === 'debounced') { return; }
+      console.error(error);
     }
-
-    if (data.length !== this._sorted.length) { return; }
-
-    // Arrange data according to container order.
-    this._currentItems = this._sorted.reduce((accum, entry, index) => {
-
-      accum[entry.target.index] = data[index];
-
-      return accum;
-    }, []);
   }
-  
+
 
   __updatePagination(index, count) {
 
@@ -782,7 +906,9 @@ class LiteList extends DomObserversMixin(AppElement) {
       count < 3                 ||
       !this._hostBbox           ||
       !this._sampleBbox
-    ) { return; }
+    ) { 
+      return; 
+    }
 
     this.fire('lite-list-pagination-changed', {
       value: {
@@ -802,6 +928,7 @@ class LiteList extends DomObserversMixin(AppElement) {
     if (!sorted || !this._virtualIndex) {
 
       this._virtualStart = 0;
+
       return;
     }
 
@@ -824,6 +951,8 @@ class LiteList extends DomObserversMixin(AppElement) {
 
   __windowScrollHandler() {
 
+    // Do NOT disrupt this global event from propagating.
+
     window.requestAnimationFrame(() => {
       this._scroll = window.scrollY;
     });
@@ -835,10 +964,6 @@ class LiteList extends DomObserversMixin(AppElement) {
     consumeEvent(event);
 
     await schedule(); // Wait for DOM rendering to settle.
-
-    if (this._containers) {
-      this._needsRepositioning = true;
-    }
 
     this._containers = this.selectAll('.container');
   }
@@ -910,18 +1035,15 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     this.__scrollToIndex(index, position, 'smooth');
 
-    return Promise.resolve(); // Unify api with 'moveToIndex'.
+    return Promise.resolve(); // Align api with 'moveToIndex'.
   }
 
-
   // Instant move to an item by its index.
-  async moveToIndex(index, position = 'start') { 
+  moveToIndex(index, position = 'start') { 
 
     this.__scrollToIndex(index, position, 'instant'); 
 
-    await schedule();
-
-    this.__reposition();
+    return this.__reposition();
   }
 
 }

@@ -395,7 +395,9 @@ export const DbListMixin = superClass => {
         typeof index !== 'number' ||
         !this._pagination         || 
         batchSize <= this._min
-      ) { return; }
+      ) { 
+        return; 
+      }
 
       const distance     = batchSize * 2;
       const garbageIndex = direction === 'forward' ?
@@ -417,7 +419,9 @@ export const DbListMixin = superClass => {
         start < 0                              || // Before beginning of array.
         start + count > this._listItems.length || // After end of array.
         count === 0                               // No items to remove. Bail.
-      ) { return; }
+      ) { 
+        return; 
+      }
 
       // Do not force and update with 'this.splice()', as these
       // changes do NOT need to be reflected the DOM immediately.
@@ -436,8 +440,10 @@ export const DbListMixin = superClass => {
         !ref                        ||
         !batchSize                  ||
         (index > 0 && !doc) // Validate index is in range.
-      ) { return; } 
-      
+      ) { 
+        return; 
+      } 
+
       // Cancel previous subscription.
       this.__unsub();
 
@@ -502,7 +508,9 @@ export const DbListMixin = superClass => {
         if (
           error.message && 
           error.message.includes('document does not exist')
-        ) { return; }
+        ) { 
+          return; 
+        }
         
         this._listItems = undefined;
 
@@ -564,16 +572,16 @@ export const DbListMixin = superClass => {
 
       this._max = event.detail.value;
     }
-
+    
 
     __paginationChangedHandler(event) {
 
-      const pagination              = event.detail.value;
-      const {direction, index, per} = pagination;
+      const pagination = event.detail.value;
+      const {count, direction, index, per} = pagination;
 
       // At the end of the camera roll. Done paginating.
-      if (this._endDetected && index >= this._pagination.index) { 
-        return; 
+      if (this._endDetected && index >= this._pagination.index) {
+        return;
       }
 
       // Don't paginate when returning to zero. The last
@@ -582,27 +590,36 @@ export const DbListMixin = superClass => {
         direction                  === 'reverse' && // Current.
         this._pagination.direction === 'reverse' && // Previous.
         index === 0
-      ) { return; }
+      ) { 
+        return; 
+      }
 
       // Do not hit the db at each change.
       //
-      // The resolution of this event is 1 fired for each row
-      // of photos that passes the top of the viewport.
-      // So compare this with our desired resolution.
+      // The resolution of this event is 1 fired for each
+      // section of items that passes the top/left of the 
+      // viewport. So compare this with our desired resolution.
       //
       // This effectively defines when to move the 'window'
       // of 'live' items.
       const remainder         = index % this._resolution;
       const pageIsThisSection = remainder >= per;
 
-      // Not initialization (index === 0).
-      // Not this section.
-      // Skip this tick.
-      if (remainder !== 0 && pageIsThisSection && !this._allowMove) {
+      // Invalid initialization state.
+      if (this._pagination?.index === 0 && this._pagination?.count > count) {
         return; 
       }
 
-      this._allowMove = false;
+      // Not initialization (index === 0).
+      // Not this section.
+      // Skip this tick.
+      if (
+        this._pagination?.index !== 0 &&
+        remainder !== 0 && 
+        pageIsThisSection
+      ) { 
+        return;  
+      }
 
       if (this._busy) {
 
@@ -650,12 +667,7 @@ export const DbListMixin = superClass => {
     // Then, move to the desired item index.
     moveTo(index, tempIndex, tempItems) {
 
-      const withLag        = index + this._lag;
-      const requiresNewDom = Math.max(index, withLag) >= this._listItems.length;
-
-      if (requiresNewDom) {
-
-        this._allowMove = true;
+      if (typeof tempIndex === 'number' && Array.isArray(tempItems)) {
 
         const start = index - tempIndex;
 
