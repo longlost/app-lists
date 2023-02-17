@@ -26,7 +26,27 @@
 import {head} from '@longlost/app-core/lambda.js';
 
 
-const getMargin = ({hostSide, hostSize, margin, sampleSide, sampleSize}) => {
+const getOffset = ({hostSide, hostSize, sampleSide, sampleSize}) => {
+
+  if (hostSide === sampleSide) { return 0; }
+
+  // Items are larger than their host.
+  if (sampleSize >= hostSize) {
+
+    return sampleSize - hostSize;
+  }
+
+  // One more than what 'fits' in the host scroller.
+  const sections = Math.ceil(hostSize / sampleSize);
+  const size     = sampleSize * sections;
+
+  return size - hostSize;
+};
+
+
+const getMargin = data => {
+
+  const {hostSide, hostSize, margin, sampleSide, sampleSize} = data;
 
   if (
     typeof hostSide   !== 'number' ||
@@ -36,18 +56,10 @@ const getMargin = ({hostSide, hostSize, margin, sampleSide, sampleSize}) => {
     !sampleSize
   ) { return; }
 
-  const diff = sampleSize - hostSize;
+  const size   = sampleSize * margin;
+  const offset = getOffset(data);
 
-  // Special care must be taken with IntersectionObserver
-  // when the child containers are larger than the host.
-  if (diff > 0) {
-
-    const offset = Math.max((sampleSide - hostSide), 0);
-    
-    return `${sampleSize + offset}px`;
-  }
-
-  return `${margin * 25}%`;
+  return `${offset + size}px`;
 };
 
 
@@ -97,6 +109,14 @@ export const DomObserversMixin = superClass => {
           value: 4
         },
 
+        // Public override for the internally computed value.
+        // Same as IntersectionObserver Api's 'threshold' option
+        // with the exception that array values here are prohibited.
+        threshold: {
+          type: Number, 
+          value: 1,
+        },
+
         _containerCount: {
           type: Number,
           value: 1,
@@ -130,7 +150,7 @@ export const DomObserversMixin = superClass => {
         // Intersection Observer entries for '_containers' that are not visible.
         _hidden: {
           type: Array,
-          computed: '__computeHidden(_entries, _threshold)'
+          computed: '__computeHidden(_entries, threshold)'
         },
 
         _hostBbox: Object,  
@@ -178,6 +198,11 @@ export const DomObserversMixin = superClass => {
           computed: '__computeRoot(layout)'
         },
 
+        _rootMargin: {
+          type: String,
+          computed: '__computeRootMargin(_marginTop, _marginRight, _marginBottom, _marginLeft)'
+        },
+
         // The initial stamped item.
         // Used to determine the number reusable containers to 
         // stamp which will fill the host.
@@ -194,11 +219,6 @@ export const DomObserversMixin = superClass => {
           type: String,
           value: 'top', // or 'left'
           computed: '__computeSide(layout)'
-        },
-
-        _threshold: {
-          type: Number,
-          computed: '__computeThreshold(_hostSize, _sampleSize)'
         }
 
       };
@@ -326,13 +346,35 @@ export const DomObserversMixin = superClass => {
       const clamped   = Math.max(defaulted, 1.5);
       const sections  = Math.ceil((hostSize * clamped) / sampleSize);
 
-      return sections * per;
+      // There needs to be enough reusable containers stamped 
+      // that some lay outside of the margin bounds. 
+      // These extra containers are available to be 
+      // repositioned by this element.
+      //
+      // One multiple represents enough elements to fill one 
+      // side of margin.
+      //
+      // Two multiples would represent enough elements to fill
+      // both sides of margin.
+      //
+      // And finally, three multiples represents enough elements
+      // to fill both sides of margin, plus a multiple's worth 
+      // of hidden and available elements.
+      const beyondMarginBoundsMultiple = 3;
+
+      return (sections * per) * beyondMarginBoundsMultiple;
     }
 
 
     __computeRoot(layout) {
 
       return layout === 'vertical' ? null : this;
+    }
+
+
+    __computeRootMargin(top, right, bottom, left) {
+
+      return `${top} ${right} ${bottom} ${left}`;
     }
 
 
@@ -345,20 +387,6 @@ export const DomObserversMixin = superClass => {
     __computeSize(dimension, bbox) {
 
       return bbox?.[dimension];
-    }
-
-    // When containers are larger than the host,
-    // the threshold must be a percentage representing
-    // the ratio of the two sizes.
-    __computeThreshold(hostSize, sampleSize) {
-
-      if (!hostSize || !sampleSize) { return 0; }
-      if (hostSize > sampleSize)    { return 0; }
-
-      const percentage = hostSize / sampleSize;
-      const threshold  = 1 - percentage;
-
-      return threshold;
     }
 
 
@@ -448,8 +476,8 @@ export const DomObserversMixin = superClass => {
 
       const options = {
         root:       this._root,
-        rootMargin: `${this._marginTop} ${this._marginRight} ${this._marginBottom} ${this._marginLeft}`,
-        threshold:  this._threshold
+        rootMargin: this._rootMargin,
+        threshold:  this.threshold
       };
 
       this._intersectionObserver = new window.IntersectionObserver(callback, options);
