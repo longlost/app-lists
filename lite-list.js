@@ -324,8 +324,6 @@ class LiteList extends DomObserversMixin(AppElement) {
         computed: '__computeSections(_containerCount, _containersPer)'
       },
 
-      _skipUpdate: Boolean,
-
       _sorted: {
         type: Array,
         computed: '__computeSorted(_containers, _incomingHidden, _side)'
@@ -930,7 +928,7 @@ class LiteList extends DomObserversMixin(AppElement) {
     if (!sorted || !this._virtualIndex) {
 
       this._virtualStart = 0;
-      
+
       return;
     }
 
