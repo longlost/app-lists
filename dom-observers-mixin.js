@@ -408,6 +408,7 @@ export const DomObserversMixin = superClass => {
       if (containers.length < 3) { return; }
 
       if (containers.length === count) {
+
         this.__observeContainers(containers);
       }
     }
@@ -458,11 +459,11 @@ export const DomObserversMixin = superClass => {
       // This way, all offscreen vs visible items is known at all times.
       const callback = entries => {
 
-        if (entries.length === this._containerCount) {
+        if (!this._entries || entries.length === this._containerCount) {
 
           this._entries = entries;
         }
-        else {
+        else if (Array.isArray(this._entries)) {
 
           this._entries = this._entries.map(entry => {
 

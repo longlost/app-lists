@@ -1,6 +1,6 @@
 {
   "name": "@longlost/app-lists",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "description": "A collection of custom elements, each designed to work with a list of DOM elements.",
   "main": "index.js",
   "scripts": {
