@@ -480,6 +480,7 @@ class LiteList extends DomObserversMixin(AppElement) {
     const multiple = Math.floor(virtualStart / length);
 
     if (multiple && !infinite) {
+
       return length;
     }
 
@@ -590,6 +591,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     this.fire('lite-list-max-containers-changed', {value: max});
   }
+
 
   __rootMarginChanged(rootMargin) {
 
