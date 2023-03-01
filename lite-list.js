@@ -185,7 +185,11 @@
   *
   *     Detail value is a DOMRect object from the initial instance of a slotted child. 
   *     This info is used internally to determine how many recycleable elements to stamp out.
-  *  
+  * 
+  * 
+  *   'lite-list-scroll-changed', {value: Num <scroll position in pixels>}
+  *   
+  *     Use cautiously, as misuse can easily have negative performance impacts.
   *
   *
   *   @customElement
@@ -654,7 +658,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     const startPosition = this._direction === 'forward' ?
                             indexPosition - margin :
-                            shiftForward  + margin;
+                            indexPosition + margin;
 
     const getPosition = placement => {
 
@@ -854,6 +858,9 @@ class LiteList extends DomObserversMixin(AppElement) {
     }
 
     this._direction = newVal > oldVal ? 'forward' : 'reverse';
+
+    // Use cautiously as misuse can have negative performance impacts.
+    this.fire('lite-list-scroll-changed', {value: newVal});
   }
 
   // '_allHidden' is an intermediate value that is
