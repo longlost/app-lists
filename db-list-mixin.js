@@ -580,15 +580,15 @@ export const DbListMixin = superClass => {
       const {count, direction, index, per} = pagination;
 
       // At the end of the camera roll. Done paginating.
-      if (this._endDetected && index >= this._pagination.index) {
+      if (this._endDetected && index >= this._pagination?.index) {
         return;
       }
 
       // Don't paginate when returning to zero. The last
       // pagination in 'reverse' already covers this 'window'.
       if (
-        direction                  === 'reverse' && // Current.
-        this._pagination.direction === 'reverse' && // Previous.
+        direction                   === 'reverse' && // Current.
+        this._pagination?.direction === 'reverse' && // Previous.
         index === 0
       ) { 
         return; 
