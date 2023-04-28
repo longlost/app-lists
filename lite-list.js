@@ -662,23 +662,40 @@ class LiteList extends DomObserversMixin(AppElement) {
 
     const getPosition = placement => {
 
-      // Check if the container would be available to be shifted forward.
-      // In this case, if it is placed before the viewport edge + rootMargin.
-      if (!this.infinite && placement < startPosition && shiftForward < this._maxSize) {
+      // Respect the fact that the list has an end
+      // when not in 'infinite' scroll mode. 
+      // Therefore, do not place items beyond that point.
+      if (!this.infinite) {
 
-        return shiftForward;
-      }
+        // Check if the container would be available to be shifted forward.
+        // In this case, if it is placed before the viewport edge + rootMargin.
+        if (
+          this._direction === 'forward' && 
+          placement    < startPosition  && 
+          shiftForward < this._maxSize
+        ) {
 
-      if (!this.infinite && placement >= this._maxSize && shiftBack >= 0) {
+          return shiftForward;
+        }
 
-        return shiftBack;
+        if (placement >= this._maxSize && shiftBack >= 0) {
+
+          return shiftBack;
+        }
       }
 
       if (indexPosition >= jump) {
 
         return currentShiftSize;
       }
+
+      // A special case where the necessary jump places items before 'startPosition'.
+      if (this._direction === 'reverse' && placement < startPosition) {
+
+        return currentShiftSize;
+      }
     };
+
 
     this._sorted.forEach(entry => {
 
@@ -691,7 +708,7 @@ class LiteList extends DomObserversMixin(AppElement) {
       const placement = boundingClientRect[this._side] + travel + this._scroll;
       const position  = getPosition(placement);
 
-      if (position) {
+      if (typeof position === 'number') {
 
         this.__move(target, position);
       }
