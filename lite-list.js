@@ -346,7 +346,7 @@ class LiteList extends DomObserversMixin(AppElement) {
 
       _translate: {
         type: String,
-        value: 'translateY', // or 'translateX'
+        value: 'translateY', // Or 'translateX'.
         computed: '__computeTranslate(layout)'
       },
 
@@ -714,12 +714,23 @@ class LiteList extends DomObserversMixin(AppElement) {
       }
     });
 
-    // Force a new set of calculations that place 
-    // the data items in the proper containers.
-    const temp = this._entries;
+    const stride = this._direction === 'forward' ? 
+                     startPosition + jump : 
+                     startPosition - jump;
 
-    this._entries = undefined;
-    this._entries = temp;
+    const reachedEnd   = this._direction === 'forward' && stride > this._maxSize;
+    const reachedStart = this._direction === 'reverse' && stride < 0;
+
+    // Resync items with thier proper containers.
+    if (reachedEnd || reachedStart) {
+
+      // Force a new set of calculations that place 
+      // the data items in the proper containers.
+      const temp = this._entries;
+
+      this._entries = undefined;
+      this._entries = temp;
+    }
   }
 
 
